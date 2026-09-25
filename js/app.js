@@ -465,7 +465,7 @@ class Card {
     this.errorEl.title = String((err && err.message) || err);
     this.cover.classList.add("is-loaded-cover");
     this.cover.style.cursor = "help";
-    if (!this.book.title) $(".card-title", this.el).textContent = this.book.input;
+    if (!this.book.title) $(".card-title", this.el).textContent = this.book.note || this.book.input;
   }
 
   // Flash mode: advance to the next page we already have.

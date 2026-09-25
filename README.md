@@ -12,6 +12,10 @@ It's a small homage to the animated book thumbnails that used to flicker through
   - `loc.gov/item/…`
   - `digitalcollections.nypl.org/items/…`
   - e-codices
+  - National Gallery of Art Library catalog records (`library.nga.gov/discovery/fulldisplay?…docid=alma…`)
+  - Any viewer link that carries the manifest in its URL (`?manifest=…`, `?iiif-content=…`), such as Universal Viewer or Mirador links
+
+  Getty object pages can't be resolved automatically. Click the IIIF logo on the page and paste the `media.getty.edu/iiif/manifest/…` link.
 
   BHL doesn't publish IIIF manifests at a predictable address. Paste the book's archive.org link instead; BHL hosts its scans there.
 

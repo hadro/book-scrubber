@@ -8,6 +8,8 @@ export const SOURCES = {
   nypl: { name: "NYPL", short: "NYPL", color: "var(--c-nypl)" },
   bhl: { name: "Biodiversity Heritage Library", short: "BHL", color: "var(--c-bhl)" },
   ecod: { name: "e-codices", short: "e-cod", color: "var(--c-ecod)" },
+  nga: { name: "National Gallery of Art Library", short: "NGA", color: "var(--c-nga)" },
+  getty: { name: "Getty Museum", short: "Getty", color: "var(--c-getty)" },
   mine: { name: "Your pick", short: "yours", color: "var(--c-mine)" },
 };
 
@@ -51,6 +53,13 @@ export const EXAMPLES = [
     input: "https://archive.org/details/b33498854",
   },
   {
+    // Title comes from the manifest.
+    source: "nga",
+    note: "National Gallery of Art Library",
+    input:
+      "https://library.nga.gov/discovery/fulldisplay?context=L&vid=01NGA_INST:NGA&search_scope=MainLibrary&tab=MainLibrary&lang=en&docid=alma99826713504896",
+  },
+  {
     source: "ia",
     title: "Alice's Adventures in Wonderland",
     note: "Carroll & Tenniel",
@@ -73,6 +82,8 @@ export function guessSource(url) {
     if (host.endsWith("nypl.org")) return "nypl";
     if (host.endsWith("biodiversitylibrary.org")) return "bhl";
     if (host.endsWith("e-codices.unifr.ch")) return "ecod";
+    if (host.endsWith("nga.gov")) return "nga";
+    if (host.endsWith("getty.edu")) return "getty";
   } catch {}
   return "mine";
 }

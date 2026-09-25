@@ -29,6 +29,13 @@ export function resolveInput(raw) {
   }
   const host = url.hostname.replace(/^www\./, "");
   const path = url.pathname;
+
+  // Viewer links (Universal Viewer, Mirador, Theseus...) usually carry the
+  // manifest in a query parameter: use it directly.
+  for (const key of ["manifest", "iiif-content", "iiif_manifest", "manifestUri"]) {
+    const v = url.searchParams.get(key);
+    if (v && /^https?:\/\//.test(v)) return resolveInput(v);
+  }
   let m;
 
   // Internet Archive: /details/{id}, /embed/{id}, /stream/{id}
@@ -62,6 +69,15 @@ export function resolveInput(raw) {
     }
   }
 
+  // National Gallery of Art Library catalog record: docid=alma{MMS id}
+  if (host === "library.nga.gov" && (m = (url.searchParams.get("docid") || "").match(/^alma(\d+)$/))) {
+    return [`https://libraryimage.nga.gov/manifest/mms/${m[1]}.json`];
+  }
+
+  // Getty object pages use a short id that can't be mapped to the manifest's
+  // UUID without reading the page itself (see inputHint).
+  if (host === "getty.edu" && path.startsWith("/art/collection/object")) return [];
+
   // Wellcome Collection work page can't be mapped without their catalogue API,
   // but a bare b-number link to their IIIF server is fine as-is.
 
@@ -74,6 +90,9 @@ export const iaManifest = (id) => `https://iiif.archive.org/iiif/3/${id}/manifes
 export function inputHint(raw) {
   if (/biodiversitylibrary\.org/.test(raw || "")) {
     return "BHL doesn't publish IIIF manifests at a predictable address, but nearly all of its scans also live at the Internet Archive. On the BHL item page, follow the \"View at Internet Archive\" (or download) link and paste that archive.org address instead.";
+  }
+  if (/getty\.edu\/art\/collection\/object/.test(raw || "")) {
+    return "Getty object pages don't reveal their manifest address to other websites. On the object page, click the IIIF logo (or the \"IIIF Manifest\" link) and paste the media.getty.edu/iiif/manifest/… address it points to.";
   }
   return "";
 }

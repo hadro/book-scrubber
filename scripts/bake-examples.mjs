@@ -57,7 +57,7 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
 
   for (const ex of examples) {
     if (!force && index.items[ex.input]) {
-      log(`skip  ${ex.title} (already baked)`);
+      log(`skip  ${ex.title || ex.input} (already baked)`);
       continue;
     }
     const slug = slugFor(ex.input);
@@ -98,9 +98,9 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
         files,
         bakedAt: new Date().toISOString().slice(0, 10),
       };
-      log(`baked ${ex.title}: ${files.length} frames from ${m.pages.length} pages`);
+      log(`baked ${ex.title || ex.input}: ${files.length} frames from ${m.pages.length} pages`);
     } catch (err) {
-      log(`FAIL  ${ex.title}: ${err.message}`);
+      log(`FAIL  ${ex.title || ex.input}: ${err.message}`);
     }
     await mkdir(outDir, { recursive: true });
     await writeFile(indexPath, JSON.stringify(index, null, 1) + "\n");

@@ -35,6 +35,24 @@ test("resolveInput: LoC, NYPL, BHL, e-codices pages", () => {
   ]);
 });
 
+test("resolveInput: NGA catalog records, viewer links, Getty hint", () => {
+  assert.deepEqual(
+    resolveInput("https://library.nga.gov/discovery/fulldisplay?context=L&vid=01NGA_INST:NGA&docid=alma99826713504896"),
+    ["https://libraryimage.nga.gov/manifest/mms/99826713504896.json"]
+  );
+  assert.deepEqual(
+    resolveInput("https://libraryimage.nga.gov/uv/?manifest=https%3A%2F%2Flibraryimage.nga.gov%2Fmanifest%2Fmms%2F991861883504896.json"),
+    ["https://libraryimage.nga.gov/manifest/mms/991861883504896.json"]
+  );
+  assert.deepEqual(resolveInput("https://viewer.example.org/?iiif-content=https://archive.org/details/foo"), [
+    "https://iiif.archive.org/iiif/3/foo/manifest.json",
+  ]);
+  assert.deepEqual(resolveInput("https://www.getty.edu/art/collection/object/104J2P"), []);
+  assert.match(inputHint("https://www.getty.edu/art/collection/object/104J2P"), /IIIF/);
+  const getty = "https://media.getty.edu/iiif/manifest/53be857e-41e8-4198-b45d-2e0f52d3051b";
+  assert.deepEqual(resolveInput(getty), [getty]);
+});
+
 test("resolveInput: manifest URLs pass through; junk is rejected", () => {
   const url = "https://example.org/iiif/book1/manifest.json";
   assert.deepEqual(resolveInput(url), [url]);
