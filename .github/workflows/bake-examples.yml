@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write # to start the Pages deploy after baking on main
 
 jobs:
   bake:
@@ -33,4 +34,11 @@ jobs:
           else
             git commit -m "Bake example shelf thumbnails"
             git push
+            # Pushes made with GITHUB_TOKEN don't trigger other workflows, so
+            # redeploy the site explicitly when baking on main.
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              gh workflow run pages.yml --ref main
+            fi
           fi
+        env:
+          GH_TOKEN: ${{ github.token }}

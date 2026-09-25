@@ -34,7 +34,10 @@ export function resolveInput(raw) {
   // manifest in a query parameter: use it directly.
   for (const key of ["manifest", "iiif-content", "iiif_manifest", "manifestUri"]) {
     const v = url.searchParams.get(key);
-    if (v && /^https?:\/\//.test(v)) return resolveInput(v);
+    if (!v) continue;
+    if (/^https?:\/\//.test(v)) return resolveInput(v);
+    const decoded = contentStateManifest(v);
+    if (decoded) return resolveInput(decoded);
   }
   let m;
 
@@ -82,6 +85,46 @@ export function resolveInput(raw) {
   // but a bare b-number link to their IIIF server is fine as-is.
 
   return [url.toString()];
+}
+
+/**
+ * IIIF Content State: a (usually base64url-encoded) JSON description of what to
+ * open, as used by drag-and-drop links. Returns the manifest (or collection)
+ * URL it points at, or null.
+ */
+export function contentStateManifest(value) {
+  let json = null;
+  const tryParse = (t) => {
+    try {
+      return JSON.parse(t);
+    } catch {
+      return null;
+    }
+  };
+  json = tryParse(value);
+  if (!json) {
+    try {
+      const b64 = value.replace(/-/g, "+").replace(/_/g, "/");
+      const bin = atob(b64 + "===".slice((b64.length + 3) % 4));
+      json = tryParse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+    } catch {
+      return null;
+    }
+  }
+  if (!json) return null;
+  const isResource = (o) => o && typeof o === "object" && /Manifest|Collection/.test(o.type || o["@type"] || "");
+  const find = (o) => {
+    if (!o || typeof o !== "object") return null;
+    if (isResource(o)) return idOf(o);
+    for (const k of ["target", "partOf", "within"]) {
+      for (const t of asArray(o[k])) {
+        const hit = typeof t === "string" ? null : find(t);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  return find(json);
 }
 
 export const iaManifest = (id) => `https://iiif.archive.org/iiif/3/${id}/manifest.json`;
@@ -197,6 +240,24 @@ function pageFromV3Canvas(canvas) {
   return makePage(canvas, body);
 }
 
+export const isCollection = (json) => /Collection/.test((json && (json.type || json["@type"])) || "");
+
+/** The manifests listed directly in a IIIF Collection (v2 or v3), plus a count of sub-collections. */
+export function collectionMembers(json) {
+  const out = [];
+  let subCollections = 0;
+  const add = (m) => {
+    const t = m.type || m["@type"] || "";
+    if (/Collection/.test(t)) subCollections++;
+    else if (/Manifest/.test(t) && idOf(m)) out.push({ id: idOf(m), label: labelText(m.label) });
+  };
+  asArray(json.items).forEach(add);
+  asArray(json.manifests).forEach((m) => add({ "@type": "sc:Manifest", ...m }));
+  asArray(json.members).forEach(add);
+  subCollections += asArray(json.collections).length;
+  return { label: labelText(json.label), manifests: out, subCollections };
+}
+
 /** Flatten a v2 or v3 manifest into {label, pages[], rtl, attribution}. */
 export function parseManifest(json) {
   if (!json || typeof json !== "object") throw new Error("Not a JSON object");
@@ -226,8 +287,10 @@ export function parseManifest(json) {
   const dir = json.viewingDirection || (asArray(json.sequences)[0] || {}).viewingDirection || "";
   const attribution = labelText(json.requiredStatement ? json.requiredStatement.value : json.attribution);
 
+  const home = asArray(json.homepage)[0] || asArray(json.related).find((r) => !/json/.test((r && r.format) || ""));
   return {
     label: labelText(json.label) || "Untitled",
+    homepage: (home && (typeof home === "string" ? home : idOf(home))) || null,
     pages,
     rtl: /right-to-left/.test(dir),
     attribution: attribution.replace(/<[^>]+>/g, "").trim(),

@@ -8,6 +8,9 @@ import {
   bisectionOrder,
   labelText,
   inputHint,
+  contentStateManifest,
+  collectionMembers,
+  isCollection,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -158,4 +161,34 @@ test("bisectionOrder is a permutation that starts coarse", () => {
   const o = bisectionOrder(24);
   assert.deepEqual(o.slice(0, 2), [0, 23]);
   assert.equal(o[2], 12);
+});
+
+test("content state links (plain and base64url) resolve to their manifest", () => {
+  const state = { id: "https://x.org/anno", type: "Annotation", motivation: ["contentState"], target: { id: "https://x.org/canvas/1", type: "Canvas", partOf: [{ id: "https://x.org/manifest.json", type: "Manifest" }] } };
+  const b64 = Buffer.from(JSON.stringify(state)).toString("base64url");
+  assert.equal(contentStateManifest(b64), "https://x.org/manifest.json");
+  assert.equal(contentStateManifest(JSON.stringify({ id: "https://x.org/m2", type: "Manifest" })), "https://x.org/m2");
+  assert.deepEqual(resolveInput(`https://viewer.example/?iiif-content=${b64}`), ["https://x.org/manifest.json"]);
+  assert.equal(contentStateManifest("not base64 at all!!"), null);
+});
+
+test("collections: v3 items and v2 manifests lists", () => {
+  const v3 = { type: "Collection", label: { en: ["Albums"] }, items: [
+    { id: "https://x.org/a", type: "Manifest", label: { en: ["A"] } },
+    { id: "https://x.org/sub", type: "Collection" },
+    { id: "https://x.org/b", type: "Manifest", label: { en: ["B"] } },
+  ] };
+  assert.ok(isCollection(v3));
+  assert.deepEqual(collectionMembers(v3), { label: "Albums", manifests: [{ id: "https://x.org/a", label: "A" }, { id: "https://x.org/b", label: "B" }], subCollections: 1 });
+  const v2 = { "@type": "sc:Collection", label: "Old", manifests: [{ "@id": "https://x.org/c", label: "C" }], collections: [{}] };
+  assert.deepEqual(collectionMembers(v2), { label: "Old", manifests: [{ id: "https://x.org/c", label: "C" }], subCollections: 1 });
+});
+
+test("homepage comes from v3 homepage or v2 related", () => {
+  const v3 = v3Manifest(1);
+  v3.homepage = [{ id: "https://lib.example/item/1", type: "Text" }];
+  assert.equal(parseManifest(v3).homepage, "https://lib.example/item/1");
+  const v2 = v2Manifest(1);
+  v2.related = "https://lib.example/item/2";
+  assert.equal(parseManifest(v2).homepage, "https://lib.example/item/2");
 });

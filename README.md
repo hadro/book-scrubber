@@ -1,29 +1,34 @@
 # Book Scrubber
 
-Hover over a digitized book and wiggle your mouse to flip through its pages. Click one to open a flipbook with play controls, and to turn it into an animated GIF.
+Hover over a digitized book and wiggle your mouse to flip through its pages. Click one to open a flipbook with play controls, and to turn it into an animated GIF, a short video or a contact sheet.
 
 It's a small homage to the animated book thumbnails that used to flicker through Internet Archive search results about ten years ago. It works with **any IIIF manifest**, so books from almost any library can go on the shelf.
 
 ## Features
 
 - **Hover-scrubber cards.** Mouse position maps to a page. Pages load "coarse first" (ends, then middle, then quarters, and so on), so you can scrub the whole book almost at once. On phones, drag a finger sideways across a card.
-- **Paste your own.** Accepts a IIIF Presentation v2 or v3 manifest URL, or a page URL from:
+- **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (brightness spread, colour and dark areas at 48×48 px) and labelled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
+- **Paste your own, or drag it in.** Accepts a IIIF Presentation v2 or v3 manifest or **collection** (its first 36 books go on the shelf), or a page URL from:
   - `archive.org/details/…`, or a bare IA identifier
   - `loc.gov/item/…`
   - `digitalcollections.nypl.org/items/…`
   - e-codices
   - National Gallery of Art Library catalog records (`library.nga.gov/discovery/fulldisplay?…docid=alma…`)
-  - Any viewer link that carries the manifest in its URL (`?manifest=…`, `?iiif-content=…`), such as Universal Viewer or Mirador links
+  - Any viewer link that carries the manifest in its URL (`?manifest=…`, `?iiif-content=…`, including encoded IIIF Content State), such as Universal Viewer or Mirador links
+
+  You can also drag a IIIF logo or any of those links onto the page.
 
   Getty object pages can't be resolved automatically. Click the IIIF logo on the page and paste the `media.getty.edu/iiif/manifest/…` link.
 
   BHL doesn't publish IIIF manifests at a predictable address. Paste the book's archive.org link instead; BHL hosts its scans there.
 
   Pasted books stay on your shelf in `localStorage`.
-- **Flipbook viewer.** Scrubbing, play/pause, speed control, boomerang mode and keyboard controls. Share links (`#m=…`) open an item directly.
-- **GIF maker.** Choose frame count, width and speed. The GIF is encoded in the browser with [gifenc](https://github.com/mattdesl/gifenc), vendored in `vendor/`.
+- **Flipbook viewer.** Scrubbing, play/pause, speed control, boomerang mode and keyboard controls. Share links open the book at the page you're on (`#m=…&p=42`). A "View at the library" link goes to the book's page at its institution when the manifest names one.
+- **Exports.** GIF, video (WebM or MP4, whichever the browser can record) or a contact-sheet JPEG. Choose frames, width, speed and pages (no blanks, plates only, or all). A credit line with the title and institution is added by default. GIFs are encoded in the browser with [gifenc](https://github.com/mattdesl/gifenc), vendored in `vendor/`.
 - **Flash mode.** Every card cycles its pages at once, like the old IA search results.
 - Right-to-left books scrub in the right direction. Light and dark themes follow the OS setting.
+- **Accessible.** Arrow keys scrub a focused card, and focus returns to the card when the viewer closes. The OS "reduce motion" setting slows flash mode and playback and turns off decorative animation.
+- **Link previews.** Open Graph and Twitter card metadata, with a share image (`img/social-card.png`).
 
 ## Running locally
 
@@ -34,15 +39,23 @@ python3 -m http.server 8000   # or: npm run serve
 # open http://localhost:8000
 ```
 
-Unit tests cover manifest parsing and URL resolution (Node 18+):
+Tests (Node 20+):
 
 ```sh
-npm test
+npm test                          # unit tests: parsing, URL resolution, page analysis, baking, health check
+npx playwright install chromium   # once
+npm run test:e2e                  # the real app in headless Chromium against a fake IIIF server
 ```
+
+The end-to-end tests never contact real libraries. They start a local fake IIIF server whose books have blank, text and plate pages, and servers that lack CORS, fail, are slow, or forbid caching. They check scrubbing, politeness (request counts, backoff, caching), exports, collections, drag and drop, share links, touch and reduced motion. Both suites run on every push via `.github/workflows/test.yml`.
+
+`?examples=0` in the URL hides the starter shelf.
 
 ## Deploying
 
-**GitHub Pages:** Settings → Pages → "Deploy from a branch" → pick the branch and `/ (root)`. The `.nojekyll` file makes Pages serve everything as-is.
+**GitHub Pages:** one-time setup: Settings → Pages → Source: **GitHub Actions**. After that, every push to `main` deploys via `.github/workflows/pages.yml`, which also includes `baked/` when it exists.
+
+The link-preview metadata in `index.html` assumes the site lives at `https://hadro.github.io/book-scrubber/`. Update those URLs if it moves or gets a custom domain. To change the share image, edit `tools/social-card.html` and run `npm run social-card`.
 
 **Hugging Face Spaces:** create a *Static* Space and push these files. HF needs this front-matter at the top of the Space's `README.md`:
 
@@ -71,6 +84,10 @@ So the homepage doesn't send every visitor's hovering to the libraries, the exam
 The baker sends one request at a time with a pause between them and identifies itself with a descriptive User-Agent. Until `baked/` exists, the site loads everything live, so baking is optional. Opening a book in the viewer always loads its full manifest live.
 
 Before baking, check that you're comfortable re-hosting thumbnails of each example. Most are public domain, but each institution's terms apply.
+
+## Example health check
+
+`.github/workflows/check-examples.yml` runs every Monday and can also be started by hand. For each example it fetches the manifest and a page image the way a browser on the live site would. It reports what works, which servers allow GIFs (CORS), and which offer ready-made thumbnails or sizes. A failing run means an example needs replacing; GitHub emails you when that happens. Locally: `npm run check-examples`.
 
 ## Being kind to image servers
 
@@ -131,7 +148,10 @@ Besides page views, it counts a few events:
 |---|---|
 | `viewer/example/<title>` | An example book opened in the viewer |
 | `viewer/pasted/<host>` | A pasted book opened, identified only by its server's hostname |
-| `gif/…` | A GIF made (same labels as above) |
+| `gif/…`, `video/…`, `sheet/…` | An export made (same labels as above) |
+| `paste/collection/<host>` | A collection pasted |
+| `drop` | Something dropped onto the page |
+| `plates-on` | Plates-only mode switched on |
 | `paste/ok/<host>`, `paste/fail/<host>` | A paste that worked or failed; hostname only, never the full URL |
 | `flash-on` | Flash mode switched on |
 
@@ -141,4 +161,6 @@ Page views record the page path only. Share links keep the book in the `#m=…` 
 
 - **GIFs need CORS.** The scrubber works with any IIIF server. Making a GIF means drawing the images onto a canvas, which works only when the image server sends `Access-Control-Allow-Origin`. When it doesn't, the viewer says so, and scrubbing still works. The fix would be a small proxy, for example a Hugging Face Space with a Python backend.
 - **Level-0 image servers**, which serve only pre-made sizes, are handled when the manifest lists `sizes`. Otherwise the app falls back to the full image.
-- IIIF **Collections** aren't supported yet. Paste one of the collection's manifests instead.
+- **Collections** are read one level deep. Nested sub-collections aren't opened, so paste one of those directly.
+- **Page detection is heuristic.** Unusual scans (dark backgrounds, colour charts, heavy bleed-through) can be misjudged. When a book has no detected plates, "plates only" falls back to all non-blank pages.
+- **Link previews are site-wide.** Crawlers don't run JavaScript, so a shared book link previews as Book Scrubber, not as the book itself. Per-book previews would need a server.

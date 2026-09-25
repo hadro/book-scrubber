@@ -1,6 +1,8 @@
 import {
   resolveInput,
   inputHint,
+  isCollection,
+  collectionMembers,
   fetchFirstManifest,
   parseManifest,
   pageImageUrl,
@@ -10,9 +12,10 @@ import {
   BIG,
 } from "./iiif.js";
 import { EXAMPLES, SOURCES, guessSource } from "./examples.js";
-import { makeGif } from "./gif.js";
+import { loadFrames, encodeGif, encodeVideo, contactSheet, videoMime, corsError } from "./export.js";
 import { cacheGet, cacheSet } from "./store.js";
 import { initAnalytics, track } from "./analytics.js";
+import { analyzeImage } from "./analyze.js";
 
 const STAGE_MAX_FRAMES = 150;
 const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
@@ -23,12 +26,14 @@ const STORAGE_KEY = "book-scrubber:shelf";
 const MANIFEST_TTL_MS = 7 * 24 * 3600 * 1000; // re-check remembered manifests weekly
 
 const $ = (sel, root = document) => root.querySelector(sel);
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 // ---------------------------------------------------------------------------
 // Image loading: per-host queues, shared cache, cancellable while queued
 // ---------------------------------------------------------------------------
 
 const loadedUrls = new Set(); // decoded and in the browser cache
+const pageStats = new Map(); // url -> { kind: "blank" | "text" | "plate", ... } when readable
 const inflight = new Map(); // url -> job (queued or loading)
 const hosts = new Map(); // host -> per-server state, see hostState()
 
@@ -83,7 +88,7 @@ function fetchImage(url, cors) {
     const img = new Image();
     img.decoding = "async";
     if (cors) img.crossOrigin = "anonymous";
-    img.onload = resolve;
+    img.onload = () => resolve(img);
     img.onerror = reject;
     img.src = url;
   });
@@ -103,8 +108,9 @@ function pump(h) {
     const t0 = performance.now();
     const tryCors = h.cors !== false;
     fetchImage(job.url, tryCors)
-      .then(() => {
+      .then((img) => {
         if (tryCors) h.cors = true;
+        return img;
       })
       .catch(async (err) => {
         // Unknown server and the CORS attempt failed: maybe it just doesn't
@@ -113,12 +119,17 @@ function pump(h) {
         if (tryCors && h.cors === undefined && h.failures === 0) {
           await fetchImage(job.url, false);
           h.cors = false;
-          return;
+          return null; // loaded, but its pixels can't be read
         }
         throw err;
       })
       .then(
-        () => {
+        (img) => {
+          // Classify the page (blank / text / plate) when we're allowed to read it.
+          if (img && (h.cors === true || job.host === location.host)) {
+            const stats = analyzeImage(img);
+            if (stats) pageStats.set(job.url, stats);
+          }
           h.failures = 0;
           const ms = performance.now() - t0;
           h.latency = h.latency ? h.latency * 0.7 + ms * 0.3 : ms;
@@ -228,8 +239,19 @@ const manifestSlots = (() => {
  * as-is for a week; after that we re-fetch, but fall back to the old copy if
  * the server is unreachable.
  */
-async function loadManifest(candidates) {
+const manifestMemo = new Map(); // this page view: key -> promise
+
+function loadManifest(candidates) {
   const key = candidates.join(" ");
+  if (!manifestMemo.has(key)) {
+    const p = loadManifestUncached(candidates, key);
+    manifestMemo.set(key, p);
+    p.catch(() => manifestMemo.delete(key));
+  }
+  return manifestMemo.get(key);
+}
+
+async function loadManifestUncached(candidates, key) {
   const cached = await cacheGet(key);
   if (cached && Date.now() - cached.at < MANIFEST_TTL_MS) return cached;
   try {
@@ -337,6 +359,10 @@ const cards = new Set();
 if (navigator.connection && navigator.connection.saveData) $("#density").value = "12";
 let density = Number($("#density").value);
 let flashTimer = null;
+let platesOnly = false;
+try {
+  platesOnly = localStorage.getItem("book-scrubber:plates") === "1";
+} catch {}
 
 const visibility = new IntersectionObserver(
   (entries) => {
@@ -420,7 +446,7 @@ class Card {
     loadImage(this.reel.urls[0], { front: true })
       .then(() => {
         this.markLoaded(0);
-        this.show(0);
+        this.show(0, true);
         this.img.classList.add("is-ready");
         this.cover.classList.add("is-loaded-cover");
       })
@@ -454,20 +480,42 @@ class Card {
     this.loaded.add(i);
     const tick = this.ticks.children[i];
     if (tick) tick.classList.add("is-loaded");
+    this.refreshTicks();
   }
 
-  nearestLoaded(i) {
+  kindOf(i) {
+    const st = pageStats.get(this.reel.urls[i]);
+    return st && st.kind;
+  }
+
+  /** Frames that may be shown now: never blanks; in plates-only mode just plates (if any). */
+  eligible() {
+    const nonBlank = [...this.loaded].filter((i) => this.kindOf(i) !== "blank");
+    if (platesOnly) {
+      const plates = nonBlank.filter((i) => this.kindOf(i) === "plate");
+      if (plates.length) return new Set(plates);
+    }
+    return new Set(nonBlank.length ? nonBlank : this.loaded);
+  }
+
+  refreshTicks() {
+    if (!this.reel) return;
+    const ok = this.eligible();
+    [...this.ticks.children].forEach((t, i) => t.classList.toggle("is-skipped", this.loaded.has(i) && !ok.has(i)));
+  }
+
+  nearestIn(set, i) {
     const n = this.reel.pages.length;
-    if (this.loaded.has(i)) return i;
-    for (let d = 1; d < n; d++) {
-      if (this.loaded.has(i - d)) return i - d;
-      if (this.loaded.has(i + d)) return i + d;
+    for (let d = 0; d < n; d++) {
+      if (set.has(i - d)) return i - d;
+      if (set.has(i + d)) return i + d;
     }
     return -1;
   }
 
-  show(i) {
-    const j = this.nearestLoaded(i);
+  /** Show frame i, or the nearest frame we're allowed to show. `any` allows blanks (the cover). */
+  show(i, any = false) {
+    const j = this.nearestIn(any ? this.loaded : this.eligible(), i);
     if (j < 0) return;
     const prev = this.ticks.children[this.current];
     if (prev) prev.classList.remove("is-current");
@@ -491,7 +539,7 @@ class Card {
   reset() {
     this.wanted = null;
     this.cover.classList.remove("is-scrubbing");
-    if (this.reel && !flashTimer) this.show(0);
+    if (this.reel && !flashTimer) this.show(0, true);
   }
 
   bindPointer() {
@@ -576,12 +624,13 @@ class Card {
   flashStep() {
     if (document.hidden || !this.visible || !this.reel || this.cover.classList.contains("is-scrubbing")) return;
     this.preload();
-    if (this.loaded.size < 2) return;
+    const ok = this.eligible();
+    if (ok.size < 2) return;
     this.cover.classList.add("is-flashing");
     let next = this.current;
     for (let k = 0; k < this.reel.pages.length; k++) {
       next = (next + 1) % this.reel.pages.length;
-      if (this.loaded.has(next)) break;
+      if (ok.has(next)) break;
     }
     this.show(next);
   }
@@ -620,9 +669,20 @@ $("#density").addEventListener("change", (e) => {
   }
 });
 
+$("#plates-toggle").checked = platesOnly;
+$("#plates-toggle").addEventListener("change", (e) => {
+  platesOnly = e.target.checked;
+  try {
+    localStorage.setItem("book-scrubber:plates", platesOnly ? "1" : "0");
+  } catch {}
+  cards.forEach((c) => c.refreshTicks());
+  if (platesOnly) track("plates-on", "Plates only on");
+});
+
 $("#flash-toggle").addEventListener("change", (e) => {
   if (e.target.checked) {
-    flashTimer = setInterval(() => cards.forEach((c) => c.flashStep()), 650);
+    // Slower flashing for people who've asked their OS for less motion.
+    flashTimer = setInterval(() => cards.forEach((c) => c.flashStep()), reduceMotion.matches ? 2000 : 650);
     track("flash-on", "Flash mode on");
   } else {
     clearInterval(flashTimer);
@@ -654,35 +714,106 @@ function bookTag(book) {
   return `pasted/${hostOf(book.manifestUrl) || "unknown"}`;
 }
 
-async function shelveInput(input, { open = false } = {}) {
+const SHELF_MAX = 100;
+const COLLECTION_MAX = 36;
+
+async function shelveInput(input, { open = false, page = null } = {}) {
   input = input.trim();
   if (!input) return null;
   const existing = [...cards].find((c) => c.book.input === input);
   if (existing) {
     existing.el.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (open) openViewer(existing.book);
+    if (open) openViewer(existing.book, { page });
     return existing;
   }
-  if (!resolveInput(input).length) {
+  const candidates = resolveInput(input);
+  if (!candidates.length) {
     setStatus(inputHint(input) || "Hmm, that doesn't look like a link or an identifier.", true);
     return null;
   }
-  const book = new Book({ input, removable: true });
   setStatus("Fetching the manifest…");
+  let fetched;
   try {
-    await book.load();
+    fetched = await loadManifest(candidates);
   } catch (err) {
     setStatus(`Couldn't shelve that one: ${friendlyError(err)} ${inputHint(input)}`.trim(), true);
-    track(`paste/fail/${hostOf(resolveInput(input)[0] || "") || "unknown"}`);
+    track(`paste/fail/${hostOf(candidates[0]) || "unknown"}`);
+    return null;
+  }
+  if (isCollection(fetched.json)) return shelveCollection(fetched);
+
+  const book = new Book({ input, removable: true });
+  try {
+    await book.load(); // served from the memo above
+  } catch (err) {
+    setStatus(`Couldn't shelve that one: ${friendlyError(err)} ${inputHint(input)}`.trim(), true);
+    track(`paste/fail/${hostOf(candidates[0]) || "unknown"}`);
     return null;
   }
   const card = addCard(book, { prepend: true, animate: true });
   track(`paste/ok/${hostOf(book.manifestUrl) || "unknown"}`);
-  writeShelf([input, ...readShelf().filter((x) => x !== input)].slice(0, 40));
+  writeShelf([input, ...readShelf().filter((x) => x !== input)].slice(0, SHELF_MAX));
   setStatus(`Shelved "${book.title}" (${book.data.pages.length} images). Hover it!`);
   card.el.scrollIntoView({ behavior: "smooth", block: "center" });
-  if (open) openViewer(book);
+  if (open) openViewer(book, { page });
   return card;
+}
+
+/** A IIIF Collection: shelve its first COLLECTION_MAX manifests as separate books. */
+function shelveCollection({ url, json }) {
+  const { label, manifests, subCollections } = collectionMembers(json);
+  track(`paste/collection/${hostOf(url) || "unknown"}`);
+  if (!manifests.length) {
+    setStatus(
+      subCollections
+        ? `"${label}" only contains other collections (${subCollections}). Paste one of those instead.`
+        : `"${label}" is an empty collection.`,
+      true
+    );
+    return null;
+  }
+  const have = new Set([...cards].map((c) => c.book.input));
+  const picked = manifests.slice(0, COLLECTION_MAX).filter((m) => !have.has(m.id));
+  let first = null;
+  for (const m of [...picked].reverse()) {
+    first = addCard(new Book({ input: m.id, title: m.label, removable: true }), { prepend: true, animate: true });
+  }
+  writeShelf([...picked.map((m) => m.id), ...readShelf().filter((x) => !picked.some((m) => m.id === x))].slice(0, SHELF_MAX));
+  const more = manifests.length > COLLECTION_MAX ? ` (the first ${COLLECTION_MAX} of ${manifests.length})` : "";
+  setStatus(`Shelved ${picked.length} books from the collection "${label}"${more}. Hover away!`);
+  if (first) first.el.scrollIntoView({ behavior: "smooth", block: "center" });
+  return first;
+}
+
+// ---- Drag and drop: IIIF logos, viewer links, manifest URLs ----
+{
+  const overlay = $("#drop-overlay");
+  let depth = 0;
+  const isLink = (e) => [...(e.dataTransfer?.types || [])].some((t) => t === "text/uri-list" || t === "text/plain");
+  window.addEventListener("dragenter", (e) => {
+    if (!isLink(e)) return;
+    depth++;
+    overlay.hidden = false;
+  });
+  window.addEventListener("dragleave", () => {
+    depth = Math.max(0, depth - 1);
+    if (!depth) overlay.hidden = true;
+  });
+  window.addEventListener("dragover", (e) => {
+    if (isLink(e)) e.preventDefault();
+  });
+  window.addEventListener("drop", (e) => {
+    depth = 0;
+    overlay.hidden = true;
+    if (!isLink(e)) return;
+    e.preventDefault();
+    const uris = (e.dataTransfer.getData("text/uri-list") || "").split(/\r?\n/).filter((l) => l && !l.startsWith("#"));
+    const text = (uris[0] || e.dataTransfer.getData("text/plain") || "").trim();
+    if (!text) return;
+    track("drop");
+    pasteInput.value = text;
+    shelveInput(text).then((ok) => ok && (pasteInput.value = ""));
+  });
 }
 
 pasteForm.addEventListener("submit", async (e) => {
@@ -755,11 +886,15 @@ function availableAt(j) {
 
 function nearestAvailable(i) {
   const n = V.frames.length;
-  for (let d = 0; d < n; d++) {
-    for (const j of d ? [i - d, i + d] : [i]) {
-      if (j < 0 || j >= n) continue;
-      const url = availableAt(j);
-      if (url) return { j, url };
+  const isBlank = (url) => (pageStats.get(url) || {}).kind === "blank";
+  // First look for the nearest non-blank page we have; blanks only as a last resort.
+  for (const allowBlank of [false, true]) {
+    for (let d = 0; d < n; d++) {
+      for (const j of d ? [i - d, i + d] : [i]) {
+        if (j < 0 || j >= n) continue;
+        const url = availableAt(j);
+        if (url && (allowBlank || !isBlank(url))) return { j, url };
+      }
     }
   }
   return null;
@@ -776,7 +911,18 @@ function setFrames(pages, keepPage) {
   V.wanted = i;
 }
 
-async function openViewer(book) {
+/** "#m=<book>" plus "&p=<page>" (1-based) when a page is given. */
+const shareHash = (book, page) => `#m=${encodeURIComponent(book.input)}${page != null ? `&p=${page + 1}` : ""}`;
+
+/** A human-facing page for the book: the manifest's homepage, or the catalog page that was pasted. */
+function homepageFor(book) {
+  if (book.data && book.data.homepage) return book.data.homepage;
+  return /^https?:\/\//.test(book.input) && !/manifest|\/iiif\//i.test(book.input) ? book.input : null;
+}
+
+async function openViewer(book, { page = null } = {}) {
+  if (!viewer.open) V.opener = document.activeElement;
+  V.startPage = page;
   track(`viewer/${bookTag(book)}`, `Opened: ${book.removable ? hostOf(book.manifestUrl) : book.title || book.note}`);
   V.gen++;
   const gen = V.gen;
@@ -800,11 +946,14 @@ async function openViewer(book) {
   resetGifUi();
   stopPlay();
   if (!viewer.open) viewer.showModal();
-  history.replaceState(null, "", `#m=${encodeURIComponent(book.input)}`);
+  history.replaceState(null, "", shareHash(book, page));
+  const home = $("#viewer-home");
+  home.hidden = !homepageFor(book);
+  if (!home.hidden) home.href = homepageFor(book);
 
   // Show the baked preview straight away while the manifest loads.
   if (book.baked) {
-    setFrames(book.baked.pages);
+    setFrames(book.baked.pages, page);
     for (const url of book.baked.files) {
       loadImage(url, { signal: V.ctl.signal })
         .then(() => V.gen === gen && viewerDisplay(V.wanted))
@@ -832,9 +981,14 @@ async function openViewer(book) {
   V.live = true;
   $("#viewer-title").textContent = book.title;
   $("#viewer-manifest").href = book.manifestUrl;
+  home.hidden = !homepageFor(book);
+  if (!home.hidden) home.href = homepageFor(book);
   const overview = sampleIndices(d.pages.length, OVERVIEW_FRAMES);
-  const keepPage = V.frames.length ? V.frames[V.wanted] : null;
+  // A shared link's page wins, unless the visitor already moved.
+  const start = V.startPage != null && V.startPage < d.pages.length ? V.startPage : null;
+  const keepPage = start != null ? start : V.frames.length ? V.frames[V.wanted] : null;
   const pages = new Set([...sampleIndices(d.pages.length, STAGE_MAX_FRAMES), ...overview, ...V.bakedMap.keys()]);
+  if (start != null) pages.add(start);
   setFrames([...pages].sort((a, b) => a - b), keepPage);
   const sampled = V.frames.length < d.pages.length ? ` · scrubbing ${V.frames.length} of them` : "";
   viewerMeta.textContent = [`${d.pages.length} images${sampled}`, d.attribution].filter(Boolean).join(" · ");
@@ -848,7 +1002,7 @@ async function openViewer(book) {
         .catch(() => {});
     }
   }
-  viewerShow(V.wanted);
+  viewerShow(V.wanted, false);
 }
 
 function abortViewerRequests() {
@@ -867,13 +1021,16 @@ function viewerDisplay(i) {
   setImg(stageImg, hit.url);
   const page = V.frames[hit.j];
   const p = V.live && V.book.data.pages[page];
-  const label = p && p.label && !/^\d+$/.test(p.label) ? ` · ${p.label}` : "";
+  // Show printed page labels ("xii", "Plate 4") but not ones that just repeat the number.
+  const label = p && p.label && !new RegExp(`^\\D{0,6}${page + 1}\\.?$`).test(p.label.trim()) ? ` · ${p.label}` : "";
   stageCounter.textContent = `p. ${page + 1} / ${V.book.total}${label}`;
   stageImg.alt = `${V.book.title}, image ${page + 1}`;
+  range.setAttribute("aria-valuetext", `Page ${V.frames[i] + 1} of ${V.book.total}`);
 }
 
 /** Show frame i and ask for what's needed around it. */
-function viewerShow(i) {
+function viewerShow(i, fromUser = true) {
+  if (fromUser) V.startPage = null;
   V.wanted = i;
   viewerDisplay(i);
   if (!V.live) return;
@@ -904,6 +1061,7 @@ function viewerShow(i) {
   clearTimeout(V.dwell);
   V.dwell = setTimeout(() => {
     if (V.gen !== gen || V.wanted !== i) return;
+    history.replaceState(null, "", shareHash(V.book, V.frames[i]));
     want(i, BIG, true);
     if (!V.playing) want(i + V.dir, BIG);
   }, DWELL_MS);
@@ -927,7 +1085,7 @@ function viewerStep(delta) {
 
 function startPlay() {
   stopPlay();
-  const fps = Number(speed.value);
+  const fps = reduceMotion.matches ? Math.min(3, Number(speed.value)) : Number(speed.value);
   V.playing = setInterval(() => viewerStep(V.dir), 1000 / fps);
   playBtn.textContent = "❚❚ Pause";
 }
@@ -989,10 +1147,11 @@ viewer.addEventListener("close", () => {
   if (V.gifAbort) V.gifAbort.abort();
   resetGifUi();
   history.replaceState(null, "", location.pathname + location.search);
+  if (V.opener && V.opener.isConnected) V.opener.focus();
 });
 
 $("#share-btn").addEventListener("click", async (e) => {
-  const url = `${location.origin}${location.pathname}#m=${encodeURIComponent(V.book.input)}`;
+  const url = `${location.origin}${location.pathname}${shareHash(V.book, V.frames.length ? V.frames[V.wanted] : null)}`;
   try {
     await navigator.clipboard.writeText(url);
     e.target.textContent = "Copied!";
@@ -1002,14 +1161,22 @@ $("#share-btn").addEventListener("click", async (e) => {
   setTimeout(() => (e.target.textContent = "Copy share link"), 1600);
 });
 
-// ---- GIF ----
+// ---- Exports: GIF, video, contact sheet ----
+
+const gifFormat = $("#gif-format");
+if (!videoMime()) gifFormat.querySelector('option[value="video"]').remove();
+const FORMAT_LABEL = { gif: "GIF", video: "video", sheet: "contact sheet" };
+gifFormat.addEventListener("change", () => {
+  resetGifUi();
+  $("#gif-delay").disabled = gifFormat.value === "sheet";
+});
 
 function resetGifUi() {
   gifProgress.hidden = true;
   gifError.textContent = "";
   gifResult.hidden = true;
   gifBtn.disabled = false;
-  gifBtn.textContent = "Make GIF";
+  gifBtn.textContent = `Make ${FORMAT_LABEL[gifFormat.value]}`;
   if (V.gifUrl) URL.revokeObjectURL(V.gifUrl);
   V.gifUrl = null;
 }
@@ -1020,8 +1187,17 @@ function medianAspect(pages) {
   return Math.min(2, Math.max(0.5, r));
 }
 
+/** "Title · Institution" for the credit line. */
+function creditText(book) {
+  const src = SOURCES[book.source];
+  let who = src && book.source !== "mine" ? src.name : "";
+  if (!who && book.data && book.data.attribution) who = book.data.attribution.replace(/\s+/g, " ").slice(0, 70);
+  if (!who) who = hostOf(book.manifestUrl);
+  return [book.title, who].filter(Boolean).join(" · ");
+}
+
 /**
- * Choose GIF source images, reusing what's already around where possible:
+ * Choose export images, reusing what's already around where possible:
  * baked files (no server cost), then the shelf's 300px size, then the viewer's
  * 800px size. Only those two widths are ever requested.
  */
@@ -1040,48 +1216,96 @@ function gifSources(n, width) {
   return sampleIndices(pages.length, n).map((i) => pageImageUrl(pages[i], size));
 }
 
+/**
+ * Like gifSources, but first looks at a pool of small thumbnails (at most 72,
+ * mostly ones the shelf and viewer already loaded) to drop blank pages, or keep
+ * only plates, before choosing `n` evenly from what's left.
+ */
+async function pickPages(n, width, mode, signal, onProgress) {
+  if (mode === "all") return gifSources(n, width);
+  const baked = V.book.baked;
+  const total = V.book.total;
+  const wantBig = width > SMALL && V.live;
+  let pool = baked ? baked.pages.map((page, k) => ({ page, small: baked.files[k] })) : null;
+  if (V.live && (!pool || n * 2 > pool.length)) {
+    const idx = new Set([...sampleIndices(total, OVERVIEW_FRAMES), ...sampleIndices(total, Math.min(72, Math.max(24, n * 3)))]);
+    pool = [...idx].sort((a, b) => a - b).map((page) => ({ page, small: smallUrl(page) }));
+  }
+  let done = 0;
+  await Promise.all(
+    pool.map((c) =>
+      loadImage(c.small, { signal })
+        .catch(() => null)
+        .finally(() => onProgress && onProgress(++done, pool.length))
+    )
+  );
+  if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
+  const kind = (c) => (pageStats.get(c.small) || {}).kind;
+  const loaded = pool.filter((c) => loadedUrls.has(c.small));
+  const nonBlank = loaded.filter((c) => kind(c) !== "blank");
+  let chosen = nonBlank.length >= 2 ? nonBlank : loaded;
+  if (mode === "plates") {
+    const plates = nonBlank.filter((c) => kind(c) === "plate");
+    if (plates.length >= 2) chosen = plates;
+  }
+  const picks = sampleIndices(chosen.length, n).map((k) => chosen[k]);
+  return picks.map((c) => (wantBig ? bigUrl(c.page) : c.small));
+}
+
 gifBtn.addEventListener("click", async () => {
   if (!V.book || (!V.live && !V.book.baked)) return;
   resetGifUi();
+  const format = gifFormat.value;
   const n = Number($("#gif-frames").value);
   const width = Number($("#gif-width").value);
   const delay = Number($("#gif-delay").value);
-  const urls = gifSources(n, width);
-  if (urls.some((u) => hosts.get(hostOf(u))?.cors === false)) {
-    gifError.textContent =
-      "This library's image server doesn't let other websites re-use its images (no CORS headers), so a GIF can't be made in the browser for this item. The scrubber still works!";
-    return;
-  }
-  const height = Math.round(width * medianAspect(V.live ? V.book.data.pages : []));
+  const mode = $("#gif-pages").value;
+  const credit = $("#gif-credit").checked ? creditText(V.book) : "";
+  const aspect = medianAspect(V.live ? V.book.data.pages : []);
+  const height = Math.round(width * aspect);
 
   const bar = $(".progress-bar", gifProgress);
   const text = $(".progress-text", gifProgress);
+  const progress = (label) => (done, total) => {
+    bar.style.width = `${Math.round((done / total) * 100)}%`;
+    text.textContent = `${label} ${Math.min(done + 1, total)} of ${total}`;
+  };
   gifProgress.hidden = false;
   gifBtn.disabled = true;
   gifBtn.textContent = "Cooking…";
   const abort = new AbortController();
   V.gifAbort = abort;
-  const bgColor = getComputedStyle(document.documentElement).getPropertyValue("--paper").trim() || "#f6efe2";
+  const background = getComputedStyle(document.documentElement).getPropertyValue("--paper").trim() || "#f6efe2";
 
   try {
-    const blob = await makeGif(urls, {
-      width,
-      height,
-      delay,
-      background: bgColor,
-      signal: abort.signal,
-      onProgress: (done, total, phase) => {
-        bar.style.width = `${Math.round((done / total) * 100)}%`;
-        text.textContent = phase === "done" ? "Done!" : `${phase === "fetching" ? "Fetching" : "Encoding"} page ${done + 1} of ${total}`;
-      },
-    });
+    // Known no-CORS server: say so before fetching anything.
+    const probe = V.live ? smallUrl(V.frames[0] || 0) : null;
+    if (probe && hosts.get(hostOf(probe))?.cors === false) throw corsError();
+    const urls = await pickPages(n, width, mode, abort.signal, progress("Looking at page"));
+    if (urls.some((u) => hosts.get(hostOf(u))?.cors === false)) throw corsError();
+    const images = await loadFrames(urls, { signal: abort.signal, onProgress: progress("Fetching page") });
+    const opts = { width, height, delay, background, credit, signal: abort.signal };
+    let blob;
+    if (format === "video") blob = await encodeVideo(images, { ...opts, onProgress: progress("Recording frame") });
+    else if (format === "sheet") blob = await contactSheet(images, { cellWidth: Math.min(width, 300), aspect, background, credit });
+    else blob = await encodeGif(images, { ...opts, onProgress: progress("Encoding page") });
+
     V.gifUrl = URL.createObjectURL(blob);
-    track(`gif/${bookTag(V.book)}`, `GIF: ${V.book.removable ? hostOf(V.book.manifestUrl) : V.book.title || V.book.note}`);
-    $("#gif-img").src = V.gifUrl;
+    track(`${format}/${bookTag(V.book)}`, `${FORMAT_LABEL[format]}: ${V.book.removable ? hostOf(V.book.manifestUrl) : V.book.title || V.book.note}`);
+    const video = $("#gif-video");
+    const img = $("#gif-img");
+    video.hidden = format !== "video";
+    img.hidden = format === "video";
+    if (format === "video") video.src = V.gifUrl;
+    else img.src = V.gifUrl;
+    const ext = format === "video" ? (blob.type.includes("mp4") ? "mp4" : "webm") : format === "sheet" ? "jpg" : "gif";
     const dl = $("#gif-download");
     dl.href = V.gifUrl;
-    dl.download = `${slug(V.book.title)}.gif`;
-    $("#gif-size").textContent = `${width}×${height} · ${urls.length} frames · ${Math.round(blob.size / 1024)} KB`;
+    dl.download = `${slug(V.book.title)}.${ext}`;
+    dl.textContent = `Download ${ext.toUpperCase()}`;
+    const what = format === "sheet" ? `${images.length} pages` : `${width}×${height} · ${images.length} frames`;
+    $("#gif-size").textContent = `${what} · ${Math.round(blob.size / 1024)} KB`;
+    gifResult.dataset.sources = urls.join(" ");
     gifResult.hidden = false;
     gifProgress.hidden = true;
   } catch (err) {
@@ -1091,7 +1315,7 @@ gifBtn.addEventListener("click", async () => {
     }
   } finally {
     gifBtn.disabled = false;
-    gifBtn.textContent = "Make another GIF";
+    gifBtn.textContent = `Make another ${FORMAT_LABEL[format]}`;
     if (V.gifAbort === abort) V.gifAbort = null;
   }
 });
@@ -1108,12 +1332,13 @@ async function loadBaked() {
 }
 
 function openFromHash() {
-  const m = location.hash.match(/^#m=(.+)$/);
+  const m = location.hash.match(/^#m=([^&]+)(?:&p=(\d+))?/);
   if (!m) return;
   const input = decodeURIComponent(m[1]);
+  const page = m[2] ? Math.max(0, Number(m[2]) - 1) : null;
   const existing = [...cards].find((c) => c.book.input === input);
-  if (existing) openViewer(existing.book);
-  else shelveInput(input, { open: true });
+  if (existing) openViewer(existing.book, { page });
+  else shelveInput(input, { open: true, page });
 }
 
 // Long-lived image cache for returning visitors (see sw.js). Optional.
@@ -1124,5 +1349,8 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 initAnalytics();
 await loadBaked();
 for (const input of readShelf()) addCard(new Book({ input, removable: true }));
-for (const ex of EXAMPLES) addCard(new Book(ex));
+// ?examples=0 hides the starter shelf (used by the tests; handy for embedding too).
+if (new URLSearchParams(location.search).get("examples") !== "0") {
+  for (const ex of EXAMPLES) addCard(new Book(ex));
+}
 openFromHash();
