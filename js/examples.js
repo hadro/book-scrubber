@@ -39,6 +39,12 @@ export const EXAMPLES = [
     input: "https://digitalcollections.nypl.org/items/4832eb40-c83f-0133-4c16-00505686a51c",
   },
   {
+    source: "nypl",
+    title: "Tsuki hyakushi (One Hundred Aspects of the Moon)",
+    note: "Yoshitoshi · woodblock prints",
+    input: "https://digitalcollections.nypl.org/items/b697e0f0-61e0-013a-bcee-0242ac110003",
+  },
+  {
     // BHL's own scan. BHL has no reliable manifest endpoint, so this goes
     // through the Internet Archive's IIIF server, where BHL hosts its scans.
     source: "bhl",
