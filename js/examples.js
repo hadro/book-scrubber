@@ -31,16 +31,24 @@ export const EXAMPLES = [
     input: "https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928",
   },
   {
-    source: "bhl",
-    title: "Hortus Eystettensis",
-    note: "Besler, 1613",
-    input: "https://www.biodiversitylibrary.org/item/98364",
-  },
-  {
+    // BHL's own scan. BHL has no reliable manifest endpoint, so this goes
+    // through the Internet Archive's IIIF server, where BHL hosts its scans.
     source: "bhl",
     title: "The Birds of America, v.1",
-    note: "Audubon, 1840",
-    input: "https://www.biodiversitylibrary.org/item/124833",
+    note: "Audubon, 1840 octavo · BHL scan",
+    input: "https://archive.org/details/birdsofamericafr01audu",
+  },
+  {
+    source: "ia",
+    title: "The Birds of America, Vol. 1",
+    note: "Audubon, folio plates",
+    input: "https://archive.org/details/audubon-4477-volume1",
+  },
+  {
+    source: "ia",
+    title: "Hortus Eystettensis",
+    note: "Besler, 1613 · Wellcome copy",
+    input: "https://archive.org/details/b33498854",
   },
   {
     source: "ia",
@@ -53,12 +61,6 @@ export const EXAMPLES = [
     title: "St. Gallen, Cod. Sang. 40",
     note: "Medieval manuscript",
     input: "https://www.e-codices.unifr.ch/metadata/iiif/csg-0040/manifest.json",
-  },
-  {
-    source: "ia",
-    title: "A Wellcome Library book",
-    note: "via IA's IIIF docs",
-    input: "b29000427_0001",
   },
 ];
 

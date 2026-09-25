@@ -7,6 +7,7 @@ import {
   sampleIndices,
   bisectionOrder,
   labelText,
+  inputHint,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -27,7 +28,8 @@ test("resolveInput: LoC, NYPL, BHL, e-codices pages", () => {
     resolveInput("https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928"),
     ["https://api-collections.nypl.org/manifests/dce441f0-83d3-0132-efca-58d385a7b928"]
   );
-  assert.equal(resolveInput("https://www.biodiversitylibrary.org/item/98364#page/1/mode/1up").length, 2);
+  assert.deepEqual(resolveInput("https://www.biodiversitylibrary.org/item/98364#page/1/mode/1up"), []);
+  assert.match(inputHint("https://www.biodiversitylibrary.org/item/98364"), /Internet Archive/);
   assert.deepEqual(resolveInput("https://www.e-codices.unifr.ch/en/list/one/csg/0390"), [
     "https://www.e-codices.unifr.ch/metadata/iiif/csg-0390/manifest.json",
   ]);
@@ -58,7 +60,7 @@ test("parseManifest: Presentation v2", () => {
   assert.equal(m.pages[0].service.id, "https://img.example.org/iiif/p0");
   assert.equal(m.pages[0].service.version, 2);
   assert.equal(m.attribution, "Some Library");
-  assert.equal(pageImageUrl(m.pages[2], 300, 400), "https://img.example.org/iiif/p2/full/!300,400/0/default.jpg");
+  assert.equal(pageImageUrl(m.pages[2], 300), "https://img.example.org/iiif/p2/full/300,/0/default.jpg");
 });
 
 test("parseManifest: Presentation v3 with ImageService3, RTL", () => {
@@ -83,10 +85,10 @@ test("parseManifest: level0 service uses a pre-baked size", () => {
   json.sequences[0].canvases[0].images[0].resource.service = {
     "@id": "https://static.example.org/p0",
     profile: "http://iiif.io/api/image/2/level0.json",
-    sizes: [{ width: 150, height: 200 }, { width: 600, height: 800 }, { width: 1200, height: 1600 }],
+    sizes: [{ width: 150, height: 200 }, { width: 250, height: 333 }, { width: 600, height: 800 }, { width: 1200, height: 1600 }],
   };
   const m = parseManifest(json);
-  assert.equal(pageImageUrl(m.pages[0], 300, 400), "https://static.example.org/p0/full/600,/0/default.jpg");
+  assert.equal(pageImageUrl(m.pages[0], 300), "https://static.example.org/p0/full/600,/0/default.jpg");
 });
 
 test("parseManifest: rejects collections and empty manifests", () => {

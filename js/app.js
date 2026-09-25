@@ -1,72 +1,148 @@
 import {
   resolveInput,
+  inputHint,
   fetchFirstManifest,
   parseManifest,
   pageImageUrl,
   sampleIndices,
   bisectionOrder,
+  SMALL,
+  BIG,
 } from "./iiif.js";
 import { EXAMPLES, SOURCES, guessSource } from "./examples.js";
 import { makeGif } from "./gif.js";
 
-const CARD_PX = { w: 300, h: 400 };
-const STAGE_PX = 1000;
 const STAGE_MAX_FRAMES = 150;
+const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
+const PER_HOST = 3; // simultaneous image requests per server
+const HOVER_INTENT_MS = 150; // ignore mouse fly-bys shorter than this
+const DWELL_MS = 200; // only fetch big images once scrubbing pauses
 const STORAGE_KEY = "book-scrubber:shelf";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
 // ---------------------------------------------------------------------------
-// Small utilities
+// Image loading: per-host queues, shared cache, cancellable while queued
 // ---------------------------------------------------------------------------
 
-/** A tiny concurrency limiter so we don't hammer anyone's image server. */
-function limiter(max) {
+const loadedUrls = new Set(); // decoded and in the browser cache
+const inflight = new Map(); // url -> promise (queued or loading)
+const hostQueues = new Map(); // host -> { active, waiting: job[] }
+
+const hostOf = (url) => {
+  try {
+    return new URL(url, location.href).host;
+  } catch {
+    return "";
+  }
+};
+
+function pump(q) {
+  while (q.active < PER_HOST && q.waiting.length) {
+    const job = q.waiting.shift();
+    job.started = true;
+    q.active++;
+    const img = new Image();
+    img.decoding = "async";
+    const done = (ok) => {
+      q.active--;
+      inflight.delete(job.url);
+      if (ok) {
+        loadedUrls.add(job.url);
+        job.resolve(job.url);
+      } else {
+        job.reject(new Error("image failed"));
+      }
+      pump(q);
+    };
+    img.onload = () => done(true);
+    img.onerror = () => done(false);
+    img.src = job.url;
+  }
+}
+
+function cancelJob(job) {
+  const q = hostQueues.get(job.host);
+  const i = q.waiting.indexOf(job);
+  if (i >= 0) q.waiting.splice(i, 1);
+  inflight.delete(job.url);
+  job.reject(new DOMException("Cancelled", "AbortError"));
+}
+
+/**
+ * A job stays queued while anyone still wants it. Callers without a signal pin
+ * it; callers with a signal release their claim when the signal aborts. Once
+ * nobody wants it (and it hasn't started), it's dropped before hitting the server.
+ */
+function claim(job, signal) {
+  if (!signal) {
+    job.pinned = true;
+    return;
+  }
+  job.owners++;
+  signal.addEventListener(
+    "abort",
+    () => {
+      job.owners--;
+      if (!job.started && !job.pinned && job.owners <= 0) cancelJob(job);
+    },
+    { once: true }
+  );
+}
+
+/** Load an image. Resolves with its URL once decoded. */
+function loadImage(url, { front = false, signal } = {}) {
+  if (loadedUrls.has(url)) return Promise.resolve(url);
+  if (signal && signal.aborted) return Promise.reject(new DOMException("Cancelled", "AbortError"));
+  let job = inflight.get(url);
+  if (!job) {
+    job = { url, host: hostOf(url), owners: 0, pinned: false, started: false };
+    job.promise = new Promise((resolve, reject) => {
+      job.resolve = resolve;
+      job.reject = reject;
+    });
+    job.promise.catch(() => {});
+    inflight.set(url, job);
+    let q = hostQueues.get(job.host);
+    if (!q) hostQueues.set(job.host, (q = { active: 0, waiting: [] }));
+    q.waiting[front ? "unshift" : "push"](job);
+    claim(job, signal);
+    pump(q);
+  } else {
+    claim(job, signal);
+    if (front && !job.started) {
+      const q = hostQueues.get(job.host);
+      const i = q.waiting.indexOf(job);
+      if (i > 0) q.waiting.unshift(...q.waiting.splice(i, 1));
+    }
+  }
+  return job.promise;
+}
+
+const manifestSlots = (() => {
   let active = 0;
   const queue = [];
-  const pump = () => {
-    while (active < max && queue.length) {
-      const { fn, resolve, reject } = queue.shift();
-      active++;
-      Promise.resolve()
-        .then(fn)
-        .then(resolve, reject)
-        .finally(() => {
-          active--;
-          pump();
-        });
-    }
+  const next = () => {
+    if (active >= 3 || !queue.length) return;
+    const { fn, resolve, reject } = queue.shift();
+    active++;
+    fn()
+      .then(resolve, reject)
+      .finally(() => {
+        active--;
+        next();
+      });
   };
-  return (fn, { front = false } = {}) =>
+  return (fn) =>
     new Promise((resolve, reject) => {
-      queue[front ? "unshift" : "push"]({ fn, resolve, reject });
-      pump();
+      queue.push({ fn, resolve, reject });
+      next();
     });
-}
+})();
 
-const imageSlots = limiter(6);
-const manifestSlots = limiter(3);
-const imageCache = new Map();
-
-/** Load (and remember) an image. Resolves with the URL once it's decoded. */
-function loadImage(url, opts) {
-  if (!imageCache.has(url)) {
-    const p = imageSlots(
-      () =>
-        new Promise((resolve, reject) => {
-          const img = new Image();
-          img.decoding = "async";
-          img.onload = () => resolve(url);
-          img.onerror = () => reject(new Error("image failed"));
-          img.src = url;
-        }),
-      opts
-    );
-    p.catch(() => imageCache.delete(url));
-    imageCache.set(url, p);
-  }
-  return imageCache.get(url);
-}
+// ---------------------------------------------------------------------------
+// Small utilities
+// ---------------------------------------------------------------------------
 
 function friendlyError(err) {
   const msg = String((err && err.message) || err);
@@ -100,8 +176,10 @@ const slug = (s) =>
     .slice(0, 60) || "book";
 
 // ---------------------------------------------------------------------------
-// Book: an input string plus its lazily-loaded manifest
+// Book: an input string, its lazily-loaded manifest, and any pre-baked frames
 // ---------------------------------------------------------------------------
+
+let BAKED = {};
 
 class Book {
   constructor({ input, title, note, source, removable = false }) {
@@ -111,14 +189,23 @@ class Book {
     this.source = source || guessSource(resolveInput(input)[0] || "");
     this.removable = removable;
     this.data = null;
-    this.manifestUrl = resolveInput(input)[0] || input;
+    this.baked = BAKED[input] || null;
+    this.manifestUrl = (this.baked && this.baked.manifestUrl) || resolveInput(input)[0] || input;
+    if (!this.title && this.baked) this.title = this.baked.label;
+  }
+
+  get total() {
+    return this.data ? this.data.pages.length : this.baked ? this.baked.total : 0;
+  }
+  get rtl() {
+    return this.data ? this.data.rtl : !!(this.baked && this.baked.rtl);
   }
 
   load() {
     if (!this._loading) {
       this._loading = manifestSlots(async () => {
         const candidates = resolveInput(this.input);
-        if (!candidates.length) throw new Error("That doesn't look like a URL or an identifier.");
+        if (!candidates.length) throw new Error(inputHint(this.input) || "That doesn't look like a URL or an identifier.");
         const { url, json } = await fetchFirstManifest(candidates);
         this.manifestUrl = url;
         this.data = parseManifest(json);
@@ -128,6 +215,13 @@ class Book {
       this._loading.catch(() => {});
     }
     return this._loading;
+  }
+
+  /** The frames a shelf card scrubs through: baked files if we have them, else live thumbnails. */
+  reel(density) {
+    if (this.baked) return { pages: this.baked.pages, urls: this.baked.files, baked: true };
+    const pages = sampleIndices(this.data.pages.length, density);
+    return { pages, urls: pages.map((i) => pageImageUrl(this.data.pages[i], SMALL)), baked: false };
   }
 }
 
@@ -155,11 +249,11 @@ class Card {
   constructor(book) {
     this.book = book;
     this.visible = false;
-    this.frames = [];
-    this.urls = [];
+    this.reel = null;
     this.loaded = new Set();
     this.current = 0;
-    this.preloading = false;
+    this.ctl = null;
+    this.failed = false;
 
     const el = $("#card-template").content.firstElementChild.cloneNode(true);
     el.__card = this;
@@ -187,38 +281,39 @@ class Card {
 
   setCaption() {
     $(".card-title", this.el).textContent = this.book.title || "Loading…";
-    const d = this.book.data;
-    const pages = d ? `${d.pages.length} ${d.pages.length === 1 ? "image" : "pages"}` : "";
+    const n = this.book.total;
+    const pages = n ? `${n} ${n === 1 ? "image" : "pages"}` : "";
     $(".card-note", this.el).textContent = [this.book.note, pages].filter(Boolean).join(" · ");
     this.cover.setAttribute("aria-label", `${this.book.title || "Book"}: open flipbook`);
   }
 
-  async init() {
-    if (this._init) return this._init;
-    this._init = (async () => {
-      try {
-        await this.book.load();
-      } catch (err) {
-        this.showError(err);
-        return;
-      }
-      this.setCaption();
-      this.buildFrames();
-      if (flashTimer) this.preload();
-    })();
+  init() {
+    if (!this._init) {
+      this._init = (async () => {
+        if (!this.book.baked) {
+          try {
+            await this.book.load();
+          } catch (err) {
+            this.showError(err);
+            throw err;
+          }
+        }
+        this.setCaption();
+        this.buildFrames();
+        if (flashTimer) this.preload();
+      })();
+      this._init.catch(() => {});
+    }
     return this._init;
   }
 
   buildFrames() {
-    const { pages } = this.book.data;
-    this.frames = sampleIndices(pages.length, density);
-    this.urls = this.frames.map((i) => pageImageUrl(pages[i], CARD_PX.w, CARD_PX.h));
+    this.stopPreload(true);
+    this.reel = this.book.reel(density);
     this.loaded = new Set();
-    this.preloading = false;
-    this.ticks.replaceChildren(...this.frames.map(() => document.createElement("i")));
+    this.ticks.replaceChildren(...this.reel.pages.map(() => document.createElement("i")));
 
-    // The cover goes first, at the front of the queue.
-    loadImage(this.urls[0], { front: true })
+    loadImage(this.reel.urls[0], { front: true })
       .then(() => {
         this.markLoaded(0);
         this.show(0);
@@ -228,19 +323,27 @@ class Card {
       .catch(() => this.showError(new Error("The first page image wouldn't load.")));
   }
 
+  /** Fetch the rest of the reel, coarse-first. Cancelled (if still queued) by stopPreload. */
   preload() {
-    if (this.preloading || !this.urls.length) return;
-    this.preloading = true;
-    const urls = this.urls;
-    for (const i of bisectionOrder(urls.length)) {
-      loadImage(urls[i])
+    if (this.ctl || !this.reel) return;
+    this.ctl = new AbortController();
+    const { signal } = this.ctl;
+    const reel = this.reel;
+    for (const i of bisectionOrder(reel.urls.length)) {
+      loadImage(reel.urls[i], { signal })
         .then(() => {
-          if (this.urls !== urls) return; // density changed meanwhile
+          if (this.reel !== reel) return;
           this.markLoaded(i);
           if (this.wanted === i) this.show(i);
         })
         .catch(() => {});
     }
+  }
+
+  stopPreload(force = false) {
+    if (flashTimer && !force) return; // flash mode keeps cards loading
+    if (this.ctl) this.ctl.abort();
+    this.ctl = null;
   }
 
   markLoaded(i) {
@@ -250,8 +353,9 @@ class Card {
   }
 
   nearestLoaded(i) {
+    const n = this.reel.pages.length;
     if (this.loaded.has(i)) return i;
-    for (let d = 1; d < this.frames.length; d++) {
+    for (let d = 1; d < n; d++) {
       if (this.loaded.has(i - d)) return i - d;
       if (this.loaded.has(i + d)) return i + d;
     }
@@ -264,18 +368,18 @@ class Card {
     const prev = this.ticks.children[this.current];
     if (prev) prev.classList.remove("is-current");
     this.current = j;
-    if (this.img.getAttribute("src") !== this.urls[j]) this.img.src = this.urls[j];
+    if (this.img.getAttribute("src") !== this.reel.urls[j]) this.img.src = this.reel.urls[j];
     const tick = this.ticks.children[j];
     if (tick) tick.classList.add("is-current");
-    const pages = this.book.data.pages;
-    this.counter.textContent = `p. ${this.frames[j] + 1} / ${pages.length}`;
+    this.counter.textContent = `p. ${this.reel.pages[j] + 1} / ${this.book.total}`;
   }
 
   /** Scrub to a 0..1 position across the card. */
   scrubTo(f) {
-    if (!this.frames.length) return;
-    if (this.book.data.rtl) f = 1 - f;
-    const i = Math.min(this.frames.length - 1, Math.max(0, Math.floor(f * this.frames.length)));
+    if (!this.reel) return;
+    if (this.book.rtl) f = 1 - f;
+    const n = this.reel.pages.length;
+    const i = Math.min(n - 1, Math.max(0, Math.floor(f * n)));
     this.wanted = i;
     this.show(i);
   }
@@ -283,17 +387,24 @@ class Card {
   reset() {
     this.wanted = null;
     this.cover.classList.remove("is-scrubbing");
-    if (this.frames.length && !flashTimer) this.show(0);
+    if (this.reel && !flashTimer) this.show(0);
   }
 
   bindPointer() {
     const c = this.cover;
     let startX = null;
     let moved = false;
+    let intent = null;
+    const cancelIntent = () => {
+      clearTimeout(intent);
+      intent = null;
+    };
 
-    c.addEventListener("pointerenter", () => {
-      if (this.book.data) this.preload();
-      else this.init().then(() => this.preload());
+    c.addEventListener("pointerenter", (e) => {
+      cancelIntent();
+      // A mouse just passing over shouldn't trigger two dozen downloads.
+      const delay = e.pointerType === "mouse" ? HOVER_INTENT_MS : 0;
+      intent = setTimeout(() => this.init().then(() => this.preload(), () => {}), delay);
     });
     c.addEventListener("pointerdown", (e) => {
       startX = e.clientX;
@@ -306,40 +417,41 @@ class Card {
       c.classList.add("is-scrubbing");
       this.scrubTo((e.clientX - r.left) / r.width);
     });
-    const end = () => {
+    const leave = () => {
       startX = null;
+      cancelIntent();
+      this.stopPreload();
+      this.reset();
     };
-    c.addEventListener("pointerup", end);
-    c.addEventListener("pointercancel", () => {
-      end();
-      this.reset();
-    });
-    c.addEventListener("pointerleave", () => {
-      end();
-      this.reset();
-    });
+    c.addEventListener("pointerup", () => (startX = null));
+    c.addEventListener("pointercancel", leave);
+    c.addEventListener("pointerleave", leave);
     c.addEventListener("click", (e) => {
       if (moved && e.pointerType !== "mouse") {
         moved = false;
         return;
       }
-      if (this.book.data) openViewer(this.book);
+      if (!this.failed) openViewer(this.book);
     });
     c.addEventListener("keydown", (e) => {
-      if (!this.frames.length) return;
+      if (!this.reel) return;
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
         e.preventDefault();
         this.preload();
-        const step = (e.key === "ArrowRight") !== this.book.data.rtl ? 1 : -1;
-        const next = Math.min(this.frames.length - 1, Math.max(0, (this.wanted ?? this.current) + step));
+        const step = (e.key === "ArrowRight") !== this.book.rtl ? 1 : -1;
+        const next = Math.min(this.reel.pages.length - 1, Math.max(0, (this.wanted ?? this.current) + step));
         this.wanted = next;
         this.show(next);
       }
     });
-    c.addEventListener("blur", () => this.reset());
+    c.addEventListener("blur", () => {
+      this.stopPreload();
+      this.reset();
+    });
   }
 
   showError(err) {
+    this.failed = true;
     this.errorEl.hidden = false;
     this.errorEl.replaceChildren();
     const big = document.createElement("span");
@@ -358,13 +470,13 @@ class Card {
 
   // Flash mode: advance to the next page we already have.
   flashStep() {
-    if (!this.visible || !this.frames.length || this.cover.classList.contains("is-scrubbing")) return;
+    if (!this.visible || !this.reel || this.cover.classList.contains("is-scrubbing")) return;
     this.preload();
     if (this.loaded.size < 2) return;
     this.cover.classList.add("is-flashing");
     let next = this.current;
-    for (let k = 0; k < this.frames.length; k++) {
-      next = (next + 1) % this.frames.length;
+    for (let k = 0; k < this.reel.pages.length; k++) {
+      next = (next + 1) % this.reel.pages.length;
       if (this.loaded.has(next)) break;
     }
     this.show(next);
@@ -382,6 +494,7 @@ function addCard(book, { prepend = false, animate = false } = {}) {
 }
 
 function removeCard(card) {
+  card.stopPreload(true);
   cards.delete(card);
   visibility.unobserve(card.el);
   card.el.remove();
@@ -395,7 +508,11 @@ function removeCard(card) {
 $("#density").addEventListener("change", (e) => {
   density = Number(e.target.value);
   for (const card of cards) {
-    if (card.book.data) card.buildFrames();
+    // Baked cards have a fixed reel; only live ones resample.
+    if (card.reel && !card.reel.baked) {
+      card.buildFrames();
+      if (flashTimer) card.preload();
+    }
   }
 });
 
@@ -406,6 +523,7 @@ $("#flash-toggle").addEventListener("change", (e) => {
     clearInterval(flashTimer);
     flashTimer = null;
     cards.forEach((c) => {
+      c.stopPreload(true);
       c.cover.classList.remove("is-flashing");
       c.reset();
     });
@@ -431,11 +549,11 @@ async function shelveInput(input, { open = false } = {}) {
   const existing = [...cards].find((c) => c.book.input === input);
   if (existing) {
     existing.el.scrollIntoView({ behavior: "smooth", block: "center" });
-    if (open && existing.book.data) openViewer(existing.book);
+    if (open) openViewer(existing.book);
     return existing;
   }
   if (!resolveInput(input).length) {
-    setStatus("Hmm, that doesn't look like a link or an identifier.", true);
+    setStatus(inputHint(input) || "Hmm, that doesn't look like a link or an identifier.", true);
     return null;
   }
   const book = new Book({ input, removable: true });
@@ -443,7 +561,7 @@ async function shelveInput(input, { open = false } = {}) {
   try {
     await book.load();
   } catch (err) {
-    setStatus(`Couldn't shelve that one: ${friendlyError(err)}`, true);
+    setStatus(`Couldn't shelve that one: ${friendlyError(err)} ${inputHint(input)}`.trim(), true);
     return null;
   }
   const card = addCard(book, { prepend: true, animate: true });
@@ -466,12 +584,21 @@ pasteForm.addEventListener("submit", async (e) => {
 // ---------------------------------------------------------------------------
 // Viewer (flipbook + GIF maker)
 // ---------------------------------------------------------------------------
+//
+// The viewer never bulk-downloads the book. It shows the best image it already
+// has for a page (big > small > baked, or the nearest page that has one), and
+// only asks the server for:
+//   - small images near where you are scrubbing (queued requests are dropped
+//     as soon as you move on), and
+//   - a big image once you pause on a page.
+// Closing the viewer drops everything still queued.
 
 const viewer = $("#viewer");
 const stageFrame = $(".stage-frame", viewer);
 const stageImg = $("#stage-img");
 const stageLoading = $("#stage-loading");
 const stageCounter = $("#stage-counter");
+const viewerMeta = $("#viewer-meta");
 const range = $("#stage-range");
 const playBtn = $("#play-btn");
 const speed = $("#speed");
@@ -484,91 +611,198 @@ const gifResult = $("#gif-result");
 
 const V = {
   book: null,
-  frames: [],
-  urls: [],
-  loaded: new Set(),
-  current: 0,
+  frames: [], // page indices the slider steps through
+  bakedMap: new Map(), // page index -> baked file
+  live: false, // manifest loaded
   wanted: 0,
   gen: 0,
   playing: null,
   dir: 1,
+  ctl: null, // lives as long as the viewer is open on this book
+  scrubCtl: null, // replaced on every move
+  dwell: null,
   gifAbort: null,
   gifUrl: null,
 };
 
-function openViewer(book) {
-  const d = book.data;
-  V.book = book;
+const smallUrl = (page) => pageImageUrl(V.book.data.pages[page], SMALL);
+const bigUrl = (page) => pageImageUrl(V.book.data.pages[page], BIG);
+
+function candidates(j) {
+  const page = V.frames[j];
+  const out = [];
+  if (V.live) out.push(bigUrl(page), smallUrl(page));
+  if (V.bakedMap.has(page)) out.push(V.bakedMap.get(page));
+  return out;
+}
+
+function availableAt(j) {
+  return candidates(j).find((u) => loadedUrls.has(u));
+}
+
+function nearestAvailable(i) {
+  const n = V.frames.length;
+  for (let d = 0; d < n; d++) {
+    for (const j of d ? [i - d, i + d] : [i]) {
+      if (j < 0 || j >= n) continue;
+      const url = availableAt(j);
+      if (url) return { j, url };
+    }
+  }
+  return null;
+}
+
+function setFrames(pages, keepPage) {
+  V.frames = pages;
+  range.max = String(Math.max(0, pages.length - 1));
+  let i = 0;
+  if (keepPage != null) {
+    i = pages.findIndex((p) => p >= keepPage);
+    if (i < 0) i = pages.length - 1;
+  }
+  V.wanted = i;
+}
+
+async function openViewer(book) {
   V.gen++;
   const gen = V.gen;
-  V.frames = sampleIndices(d.pages.length, STAGE_MAX_FRAMES);
-  V.urls = V.frames.map((i) => pageImageUrl(d.pages[i], STAGE_PX, STAGE_PX));
-  V.loaded = new Set();
-  V.current = V.wanted = 0;
+  abortViewerRequests();
+  V.ctl = new AbortController();
+  V.book = book;
+  V.live = false;
   V.dir = 1;
+  V.bakedMap = new Map(book.baked ? book.baked.pages.map((p, k) => [p, book.baked.files[k]]) : []);
 
   const src = SOURCES[book.source] || SOURCES.mine;
   const sticker = $("#viewer-sticker");
   sticker.textContent = src.name;
   sticker.style.setProperty("--sticker", src.color);
-  $("#viewer-title").textContent = book.title;
-  const sampled = V.frames.length < d.pages.length ? ` · scrubbing ${V.frames.length} of them` : "";
-  $("#viewer-meta").textContent = [`${d.pages.length} images${sampled}`, d.attribution].filter(Boolean).join(" · ");
+  $("#viewer-title").textContent = book.title || "Loading…";
   $("#viewer-manifest").href = book.manifestUrl;
-
-  range.max = String(V.frames.length - 1);
-  range.value = "0";
+  viewerMeta.textContent = "Loading the manifest…";
   stageImg.removeAttribute("src");
   stageLoading.hidden = false;
   stageCounter.textContent = "–";
   resetGifUi();
   stopPlay();
-
-  for (const i of bisectionOrder(V.urls.length)) {
-    const url = V.urls[i];
-    loadImage(url, { front: i === 0 })
-      .then(() => {
-        if (V.gen !== gen) return;
-        V.loaded.add(i);
-        if (V.loaded.size === 1 || V.wanted === i) viewerShow(V.wanted);
-      })
-      .catch(() => {});
-  }
-
   if (!viewer.open) viewer.showModal();
   history.replaceState(null, "", `#m=${encodeURIComponent(book.input)}`);
-}
 
-function viewerNearest(i) {
-  if (V.loaded.has(i)) return i;
-  for (let d = 1; d < V.frames.length; d++) {
-    if (V.loaded.has(i - d)) return i - d;
-    if (V.loaded.has(i + d)) return i + d;
+  // Show the baked preview straight away while the manifest loads.
+  if (book.baked) {
+    setFrames(book.baked.pages);
+    for (const url of book.baked.files) {
+      loadImage(url, { signal: V.ctl.signal })
+        .then(() => V.gen === gen && viewerDisplay(V.wanted))
+        .catch(() => {});
+    }
   }
-  return -1;
+
+  try {
+    await book.load();
+  } catch (err) {
+    if (V.gen !== gen) return;
+    if (book.baked) {
+      viewerMeta.textContent = `Showing the saved preview only; the full manifest wouldn't load. ${friendlyError(err)}`;
+    } else {
+      stageLoading.hidden = true;
+      stageCounter.textContent = "?!";
+      viewerMeta.textContent = friendlyError(err);
+      gifBtn.disabled = true;
+    }
+    return;
+  }
+  if (V.gen !== gen) return;
+
+  const d = book.data;
+  V.live = true;
+  $("#viewer-title").textContent = book.title;
+  $("#viewer-manifest").href = book.manifestUrl;
+  const overview = sampleIndices(d.pages.length, OVERVIEW_FRAMES);
+  const keepPage = V.frames.length ? V.frames[V.wanted] : null;
+  const pages = new Set([...sampleIndices(d.pages.length, STAGE_MAX_FRAMES), ...overview, ...V.bakedMap.keys()]);
+  setFrames([...pages].sort((a, b) => a - b), keepPage);
+  const sampled = V.frames.length < d.pages.length ? ` · scrubbing ${V.frames.length} of them` : "";
+  viewerMeta.textContent = [`${d.pages.length} images${sampled}`, d.attribution].filter(Boolean).join(" · ");
+
+  // A coarse overview so the slider works end to end: the same small images the
+  // shelf card uses (usually already cached), or nothing at all for baked books.
+  if (!book.baked) {
+    for (const k of bisectionOrder(overview.length)) {
+      loadImage(smallUrl(overview[k]), { signal: V.ctl.signal })
+        .then(() => V.gen === gen && viewerDisplay(V.wanted))
+        .catch(() => {});
+    }
+  }
+  viewerShow(V.wanted);
 }
 
+function abortViewerRequests() {
+  clearTimeout(V.dwell);
+  if (V.scrubCtl) V.scrubCtl.abort();
+  if (V.ctl) V.ctl.abort();
+  V.scrubCtl = V.ctl = null;
+}
+
+/** Paint the best image we already have for frame i. No network. */
+function viewerDisplay(i) {
+  range.value = String(i);
+  const hit = nearestAvailable(i);
+  if (!hit) return;
+  stageLoading.hidden = true;
+  if (stageImg.getAttribute("src") !== hit.url) stageImg.src = hit.url;
+  const page = V.frames[hit.j];
+  const p = V.live && V.book.data.pages[page];
+  const label = p && p.label && !/^\d+$/.test(p.label) ? ` · ${p.label}` : "";
+  stageCounter.textContent = `p. ${page + 1} / ${V.book.total}${label}`;
+  stageImg.alt = `${V.book.title}, image ${page + 1}`;
+}
+
+/** Show frame i and ask for what's needed around it. */
 function viewerShow(i) {
   V.wanted = i;
-  range.value = String(i);
-  const j = viewerNearest(i);
-  if (j < 0) return;
-  stageLoading.hidden = true;
-  V.current = j;
-  if (stageImg.getAttribute("src") !== V.urls[j]) stageImg.src = V.urls[j];
-  const page = V.book.data.pages[V.frames[j]];
-  const label = page.label && !/^\d+$/.test(page.label) ? ` · ${page.label}` : "";
-  stageCounter.textContent = `p. ${V.frames[j] + 1} / ${V.book.data.pages.length}${label}`;
-  stageImg.alt = `${V.book.title}, image ${V.frames[j] + 1}`;
+  viewerDisplay(i);
+  if (!V.live) return;
+
+  const gen = V.gen;
+  if (V.scrubCtl) V.scrubCtl.abort();
+  V.scrubCtl = new AbortController();
+  const { signal } = V.scrubCtl;
+  const n = V.frames.length;
+  const refresh = () => V.gen === gen && viewerDisplay(V.wanted);
+  const want = (j, size, front = false) => {
+    if (j < 0 || j >= n) return;
+    const page = V.frames[j];
+    const url = size === BIG ? bigUrl(page) : smallUrl(page);
+    if (size === SMALL && (V.bakedMap.has(page) || loadedUrls.has(bigUrl(page)))) return;
+    loadImage(url, { signal, front }).then(refresh, () => {});
+  };
+
+  want(i, SMALL, true);
+  // Look a little ahead: further while playing, one either side while scrubbing.
+  if (V.playing) for (let k = 1; k <= 3; k++) want(i + V.dir * k, SMALL);
+  else {
+    want(i + 1, SMALL);
+    want(i - 1, SMALL);
+  }
+
+  // Big images only once you pause on a page.
+  clearTimeout(V.dwell);
+  V.dwell = setTimeout(() => {
+    if (V.gen !== gen || V.wanted !== i) return;
+    want(i, BIG, true);
+    if (!V.playing) want(i + V.dir, BIG);
+  }, DWELL_MS);
 }
 
 function viewerStep(delta) {
   const n = V.frames.length;
+  if (!n) return;
   let next = V.wanted + delta;
   if (bounce.checked) {
     if (next >= n || next < 0) {
       V.dir = -V.dir;
-      next = V.wanted + delta * -1;
+      next = V.wanted - delta;
     }
     next = Math.max(0, Math.min(n - 1, next));
   } else {
@@ -606,17 +840,19 @@ range.addEventListener("input", () => {
   stageFrame.addEventListener("pointermove", (e) => {
     if (e.pointerType !== "mouse" && !dragging) return;
     if (!V.frames.length) return;
-    stopPlay();
     const r = stageFrame.getBoundingClientRect();
     let f = (e.clientX - r.left) / r.width;
-    if (V.book.data.rtl) f = 1 - f;
-    viewerShow(Math.min(V.frames.length - 1, Math.max(0, Math.floor(f * V.frames.length))));
+    if (V.book.rtl) f = 1 - f;
+    const i = Math.min(V.frames.length - 1, Math.max(0, Math.floor(f * V.frames.length)));
+    if (i === V.wanted) return;
+    stopPlay();
+    viewerShow(i);
   });
 }
 
 viewer.addEventListener("keydown", (e) => {
   if (e.target.matches("input[type=text], select")) return;
-  const rtl = V.book && V.book.data.rtl;
+  const rtl = V.book && V.book.rtl;
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
     if (e.target === range) return; // native range handles it
     e.preventDefault();
@@ -635,6 +871,7 @@ viewer.addEventListener("click", (e) => {
 viewer.addEventListener("close", () => {
   V.gen++;
   stopPlay();
+  abortViewerRequests();
   if (V.gifAbort) V.gifAbort.abort();
   resetGifUi();
   history.replaceState(null, "", location.pathname + location.search);
@@ -669,17 +906,34 @@ function medianAspect(pages) {
   return Math.min(2, Math.max(0.5, r));
 }
 
+/**
+ * Choose GIF source images, reusing what's already around where possible:
+ * baked files (no server cost), then the shelf's 300px size, then the viewer's
+ * 800px size. Only those two widths are ever requested.
+ */
+function gifSources(n, width) {
+  const baked = V.book.baked;
+  if (baked && (!V.live || (width <= SMALL && n <= baked.files.length))) {
+    return sampleIndices(baked.files.length, n).map((k) => baked.files[k]);
+  }
+  const pages = V.book.data.pages;
+  if (width <= SMALL && n <= OVERVIEW_FRAMES) {
+    // Pick from the overview pages: the exact images the shelf and viewer already fetched.
+    const overview = sampleIndices(pages.length, OVERVIEW_FRAMES);
+    return sampleIndices(overview.length, n).map((k) => smallUrl(overview[k]));
+  }
+  const size = width <= SMALL ? SMALL : BIG;
+  return sampleIndices(pages.length, n).map((i) => pageImageUrl(pages[i], size));
+}
+
 gifBtn.addEventListener("click", async () => {
-  if (!V.book) return;
+  if (!V.book || (!V.live && !V.book.baked)) return;
   resetGifUi();
-  const d = V.book.data;
   const n = Number($("#gif-frames").value);
   const width = Number($("#gif-width").value);
   const delay = Number($("#gif-delay").value);
-  const idx = sampleIndices(d.pages.length, n);
-  const pages = idx.map((i) => d.pages[i]);
-  const height = Math.round(width * medianAspect(pages));
-  const urls = pages.map((p) => pageImageUrl(p, width, height));
+  const urls = gifSources(n, width);
+  const height = Math.round(width * medianAspect(V.live ? V.book.data.pages : []));
 
   const bar = $(".progress-bar", gifProgress);
   const text = $(".progress-text", gifProgress);
@@ -726,18 +980,23 @@ gifBtn.addEventListener("click", async () => {
 // Boot
 // ---------------------------------------------------------------------------
 
-for (const input of readShelf()) addCard(new Book({ input, removable: true }));
-for (const ex of EXAMPLES) addCard(new Book(ex));
+async function loadBaked() {
+  try {
+    const res = await fetch("baked/index.json", { cache: "no-cache" });
+    if (res.ok) BAKED = (await res.json()).items || {};
+  } catch {}
+}
 
 function openFromHash() {
   const m = location.hash.match(/^#m=(.+)$/);
   if (!m) return;
   const input = decodeURIComponent(m[1]);
   const existing = [...cards].find((c) => c.book.input === input);
-  if (existing) {
-    existing.book.load().then(() => openViewer(existing.book), (err) => setStatus(friendlyError(err), true));
-  } else {
-    shelveInput(input, { open: true });
-  }
+  if (existing) openViewer(existing.book);
+  else shelveInput(input, { open: true });
 }
+
+await loadBaked();
+for (const input of readShelf()) addCard(new Book({ input, removable: true }));
+for (const ex of EXAMPLES) addCard(new Book(ex));
 openFromHash();

@@ -48,10 +48,9 @@ export function resolveInput(raw) {
     return [`https://api-collections.nypl.org/manifests/${m[1]}`];
   }
 
-  // Biodiversity Heritage Library item page
-  if (host === "biodiversitylibrary.org" && (m = path.match(/^\/item(?:details)?\/(\d+)/))) {
-    return bhlManifests(m[1]);
-  }
+  // Biodiversity Heritage Library doesn't serve item manifests at a predictable
+  // address (see inputHint); its scans live at the Internet Archive instead.
+  if (host === "biodiversitylibrary.org" && !path.includes("manifest")) return [];
 
   // e-codices viewer page: /en/list/one/csg/0390  or /en/csg/0390/1r/0/
   if (host === "e-codices.unifr.ch" && !path.includes("/metadata/iiif/")) {
@@ -70,10 +69,14 @@ export function resolveInput(raw) {
 }
 
 export const iaManifest = (id) => `https://iiif.archive.org/iiif/3/${id}/manifest.json`;
-export const bhlManifests = (itemId) => [
-  `https://www.biodiversitylibrary.org/iiif/${itemId}/manifest`,
-  `https://www.biodiversitylibrary.org/iiif/v3/${itemId}/manifest`,
-];
+
+/** A friendlier explanation for inputs we know can't be resolved directly. */
+export function inputHint(raw) {
+  if (/biodiversitylibrary\.org/.test(raw || "")) {
+    return "BHL doesn't publish IIIF manifests at a predictable address, but nearly all of its scans also live at the Internet Archive. On the BHL item page, follow the \"View at Internet Archive\" (or download) link and paste that archive.org address instead.";
+  }
+  return "";
+}
 
 // ---------------------------------------------------------------------------
 // Fetching
@@ -203,21 +206,29 @@ export function parseManifest(json) {
 // ---------------------------------------------------------------------------
 
 /**
- * URL for a page image scaled to fit within (w, h).
+ * Two fixed widths for every request. Sticking to a couple of canonical sizes
+ * means repeat visitors (and other IIIF viewers) are more likely to hit the
+ * image server's cache instead of forcing a fresh resize from the master file.
+ */
+export const SMALL = 300;
+export const BIG = 800;
+
+/**
+ * URL for a page image `width` pixels wide (width-only IIIF size, "w,").
  * Falls back to the raw image URL when there's no usable Image API service.
  */
-export function pageImageUrl(page, w, h = w) {
+export function pageImageUrl(page, width) {
   const svc = page.service;
   if (svc && svc.level !== 0) {
-    return `${svc.id}/full/!${Math.round(w)},${Math.round(h)}/0/default.jpg`;
+    return `${svc.id}/full/${width},/0/default.jpg`;
   }
   if (svc && svc.level === 0 && Array.isArray(svc.sizes) && svc.sizes.length) {
-    // Level 0 servers only serve pre-baked sizes: pick the smallest that's big enough.
+    // Level 0 servers only serve pre-made sizes: pick the smallest that's wide enough.
     const sorted = [...svc.sizes].sort((a, b) => a.width - b.width);
-    const fit = sorted.find((s) => s.width >= w || s.height >= h) || sorted[sorted.length - 1];
+    const fit = sorted.find((s) => s.width >= width) || sorted[sorted.length - 1];
     return `${svc.id}/full/${fit.width},${svc.version === 3 ? fit.height : ""}/0/default.jpg`;
   }
-  return (w <= 300 && page.thumbnail) || page.imageUrl || (svc && `${svc.id}/full/full/0/default.jpg`);
+  return (width <= SMALL && page.thumbnail) || page.imageUrl || (svc && `${svc.id}/full/full/0/default.jpg`);
 }
 
 /** Pick `n` evenly spaced indices from [0, total). Always includes first and last. */
