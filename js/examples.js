@@ -33,6 +33,12 @@ export const EXAMPLES = [
     input: "https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928",
   },
   {
+    source: "nypl",
+    title: "Shiohi no tsuto (Gifts of the Ebb Tide)",
+    note: "Utamaro, 1789 · woodblock shells",
+    input: "https://digitalcollections.nypl.org/items/4832eb40-c83f-0133-4c16-00505686a51c",
+  },
+  {
     // BHL's own scan. BHL has no reliable manifest endpoint, so this goes
     // through the Internet Archive's IIIF server, where BHL hosts its scans.
     source: "bhl",
