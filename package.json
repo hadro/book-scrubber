@@ -1,0 +1,10 @@
+{
+  "name": "book-scrubber",
+  "private": true,
+  "type": "module",
+  "description": "Hover-to-scrub through digitized books from any IIIF manifest, and make GIFs.",
+  "scripts": {
+    "serve": "python3 -m http.server 8000",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
