@@ -12,6 +12,7 @@ import {
 import { EXAMPLES, SOURCES, guessSource } from "./examples.js";
 import { makeGif } from "./gif.js";
 import { cacheGet, cacheSet } from "./store.js";
+import { initAnalytics, track } from "./analytics.js";
 
 const STAGE_MAX_FRAMES = 150;
 const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
@@ -622,6 +623,7 @@ $("#density").addEventListener("change", (e) => {
 $("#flash-toggle").addEventListener("change", (e) => {
   if (e.target.checked) {
     flashTimer = setInterval(() => cards.forEach((c) => c.flashStep()), 650);
+    track("flash-on", "Flash mode on");
   } else {
     clearInterval(flashTimer);
     flashTimer = null;
@@ -646,6 +648,12 @@ function setStatus(text, isError = false) {
   pasteStatus.classList.toggle("is-error", isError);
 }
 
+/** Anonymous label for analytics: example title, or just the host for pasted books. */
+function bookTag(book) {
+  if (!book.removable) return `example/${slug(book.title || book.note)}`;
+  return `pasted/${hostOf(book.manifestUrl) || "unknown"}`;
+}
+
 async function shelveInput(input, { open = false } = {}) {
   input = input.trim();
   if (!input) return null;
@@ -665,9 +673,11 @@ async function shelveInput(input, { open = false } = {}) {
     await book.load();
   } catch (err) {
     setStatus(`Couldn't shelve that one: ${friendlyError(err)} ${inputHint(input)}`.trim(), true);
+    track(`paste/fail/${hostOf(resolveInput(input)[0] || "") || "unknown"}`);
     return null;
   }
   const card = addCard(book, { prepend: true, animate: true });
+  track(`paste/ok/${hostOf(book.manifestUrl) || "unknown"}`);
   writeShelf([input, ...readShelf().filter((x) => x !== input)].slice(0, 40));
   setStatus(`Shelved "${book.title}" (${book.data.pages.length} images). Hover it!`);
   card.el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -767,6 +777,7 @@ function setFrames(pages, keepPage) {
 }
 
 async function openViewer(book) {
+  track(`viewer/${bookTag(book)}`, `Opened: ${book.removable ? hostOf(book.manifestUrl) : book.title || book.note}`);
   V.gen++;
   const gen = V.gen;
   abortViewerRequests();
@@ -1065,6 +1076,7 @@ gifBtn.addEventListener("click", async () => {
       },
     });
     V.gifUrl = URL.createObjectURL(blob);
+    track(`gif/${bookTag(V.book)}`, `GIF: ${V.book.removable ? hostOf(V.book.manifestUrl) : V.book.title || V.book.note}`);
     $("#gif-img").src = V.gifUrl;
     const dl = $("#gif-download");
     dl.href = V.gifUrl;
@@ -1109,6 +1121,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
+initAnalytics();
 await loadBaked();
 for (const input of readShelf()) addCard(new Book({ input, removable: true }));
 for (const ex of EXAMPLES) addCard(new Book(ex));

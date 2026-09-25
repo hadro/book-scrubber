@@ -121,6 +121,22 @@ The example shelf's thumbnails are downloaded once, by the "Bake example shelf" 
 
 If Book Scrubber is causing you trouble, or you'd rather your collection not appear on the example shelf, please [open an issue](https://github.com/hadro/book-scrubber/issues) and it will be dealt with promptly.
 
+## Analytics
+
+Optional [GoatCounter](https://www.goatcounter.com) analytics: no cookies, no personal data. To enable it, set `GOATCOUNTER_CODE` in `js/analytics.js` to your site code (the `mycode` in `mycode.goatcounter.com`). While it's empty, nothing is loaded or sent.
+
+Besides page views, it counts a few events:
+
+| Event | What's recorded |
+|---|---|
+| `viewer/example/<title>` | An example book opened in the viewer |
+| `viewer/pasted/<host>` | A pasted book opened, identified only by its server's hostname |
+| `gif/…` | A GIF made (same labels as above) |
+| `paste/ok/<host>`, `paste/fail/<host>` | A paste that worked or failed; hostname only, never the full URL |
+| `flash-on` | Flash mode switched on |
+
+Page views record the page path only. Share links keep the book in the `#m=…` part of the URL, which GoatCounter doesn't send.
+
 ## Known limits
 
 - **GIFs need CORS.** The scrubber works with any IIIF server. Making a GIF means drawing the images onto a canvas, which works only when the image server sends `Access-Control-Allow-Origin`. When it doesn't, the viewer says so, and scrubbing still works. The fix would be a small proxy, for example a Hugging Face Space with a Python backend.
