@@ -11,6 +11,7 @@ import {
 } from "./iiif.js";
 import { EXAMPLES, SOURCES, guessSource } from "./examples.js";
 import { makeGif } from "./gif.js";
+import { cacheGet, cacheSet } from "./store.js";
 
 const STAGE_MAX_FRAMES = 150;
 const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
@@ -18,6 +19,7 @@ const PER_HOST = 3; // simultaneous image requests per server
 const HOVER_INTENT_MS = 150; // ignore mouse fly-bys shorter than this
 const DWELL_MS = 200; // only fetch big images once scrubbing pauses
 const STORAGE_KEY = "book-scrubber:shelf";
+const MANIFEST_TTL_MS = 7 * 24 * 3600 * 1000; // re-check remembered manifests weekly
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -26,8 +28,8 @@ const $ = (sel, root = document) => root.querySelector(sel);
 // ---------------------------------------------------------------------------
 
 const loadedUrls = new Set(); // decoded and in the browser cache
-const inflight = new Map(); // url -> promise (queued or loading)
-const hostQueues = new Map(); // host -> { active, waiting: job[] }
+const inflight = new Map(); // url -> job (queued or loading)
+const hosts = new Map(); // host -> per-server state, see hostState()
 
 const hostOf = (url) => {
   try {
@@ -37,34 +39,115 @@ const hostOf = (url) => {
   }
 };
 
-function pump(q) {
-  while (q.active < PER_HOST && q.waiting.length) {
-    const job = q.waiting.shift();
-    job.started = true;
-    q.active++;
+/**
+ * Per-server bookkeeping:
+ *  - cors: undefined until we know; true if the server sends CORS headers
+ *    (then images load in CORS mode, which the service worker can cache
+ *    efficiently and the GIF maker can reuse); false if it doesn't.
+ *  - latency: moving average of load times, used to lower concurrency for
+ *    slow servers.
+ *  - failures / pausedUntil: back off after repeated errors.
+ */
+function hostState(host) {
+  let h = hosts.get(host);
+  if (!h) {
+    h = { active: 0, waiting: [], cors: host === location.host ? false : undefined, latency: 0, failures: 0, pausedUntil: 0, timer: null };
+    hosts.set(host, h);
+  }
+  return h;
+}
+
+/** The crossorigin attribute to use for an image URL, matching how the loader fetched it. */
+function corsAttr(url) {
+  const h = hosts.get(hostOf(url));
+  return h && h.cors ? "anonymous" : null;
+}
+
+/** Set an <img>'s src without mismatching the cached copy's CORS mode. */
+function setImg(img, url) {
+  if (img.getAttribute("src") === url) return;
+  const mode = corsAttr(url);
+  if (img.crossOrigin !== mode) img.crossOrigin = mode;
+  img.src = url;
+}
+
+function concurrencyFor(h) {
+  if (h.latency > 2500) return 1;
+  if (h.latency > 1000) return 2;
+  return PER_HOST;
+}
+
+function fetchImage(url, cors) {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
-    const done = (ok) => {
-      q.active--;
-      inflight.delete(job.url);
-      if (ok) {
-        loadedUrls.add(job.url);
-        job.resolve(job.url);
-      } else {
-        job.reject(new Error("image failed"));
-      }
-      pump(q);
-    };
-    img.onload = () => done(true);
-    img.onerror = () => done(false);
-    img.src = job.url;
+    if (cors) img.crossOrigin = "anonymous";
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function pump(h) {
+  if (document.hidden) return; // resumes on visibilitychange
+  const now = Date.now();
+  if (h.pausedUntil > now) {
+    if (!h.timer) h.timer = setTimeout(() => ((h.timer = null), pump(h)), h.pausedUntil - now);
+    return;
+  }
+  while (h.active < concurrencyFor(h) && h.waiting.length) {
+    const job = h.waiting.shift();
+    job.started = true;
+    h.active++;
+    const t0 = performance.now();
+    const tryCors = h.cors !== false;
+    fetchImage(job.url, tryCors)
+      .then(() => {
+        if (tryCors) h.cors = true;
+      })
+      .catch(async (err) => {
+        // Unknown server and the CORS attempt failed: maybe it just doesn't
+        // send CORS headers. One plain retry settles it for this server
+        // (unless it's already failing, when the retry would just add load).
+        if (tryCors && h.cors === undefined && h.failures === 0) {
+          await fetchImage(job.url, false);
+          h.cors = false;
+          return;
+        }
+        throw err;
+      })
+      .then(
+        () => {
+          h.failures = 0;
+          const ms = performance.now() - t0;
+          h.latency = h.latency ? h.latency * 0.7 + ms * 0.3 : ms;
+          loadedUrls.add(job.url);
+          job.resolve(job.url);
+        },
+        () => {
+          // Three failures in a row: pause this server, doubling up to a minute.
+          h.failures++;
+          if (h.failures >= 3) h.pausedUntil = Date.now() + Math.min(60000, 2000 * 2 ** (h.failures - 3));
+          job.reject(new Error("image failed"));
+        }
+      )
+      .finally(() => {
+        h.active--;
+        inflight.delete(job.url);
+        pump(h);
+      });
   }
 }
 
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) hosts.forEach(pump);
+  else stopPlay(); // don't flip pages nobody is watching
+});
+
 function cancelJob(job) {
-  const q = hostQueues.get(job.host);
-  const i = q.waiting.indexOf(job);
-  if (i >= 0) q.waiting.splice(i, 1);
+  const h = hostState(job.host);
+  const i = h.waiting.indexOf(job);
+  if (i >= 0) h.waiting.splice(i, 1);
   inflight.delete(job.url);
   job.reject(new DOMException("Cancelled", "AbortError"));
 }
@@ -103,17 +186,16 @@ function loadImage(url, { front = false, signal } = {}) {
     });
     job.promise.catch(() => {});
     inflight.set(url, job);
-    let q = hostQueues.get(job.host);
-    if (!q) hostQueues.set(job.host, (q = { active: 0, waiting: [] }));
-    q.waiting[front ? "unshift" : "push"](job);
+    const h = hostState(job.host);
+    h.waiting[front ? "unshift" : "push"](job);
     claim(job, signal);
-    pump(q);
+    pump(h);
   } else {
     claim(job, signal);
     if (front && !job.started) {
-      const q = hostQueues.get(job.host);
-      const i = q.waiting.indexOf(job);
-      if (i > 0) q.waiting.unshift(...q.waiting.splice(i, 1));
+      const h = hostState(job.host);
+      const i = h.waiting.indexOf(job);
+      if (i > 0) h.waiting.unshift(...h.waiting.splice(i, 1));
     }
   }
   return job.promise;
@@ -139,6 +221,25 @@ const manifestSlots = (() => {
       next();
     });
 })();
+
+/**
+ * Fetch a manifest, remembering it in IndexedDB. A remembered copy is used
+ * as-is for a week; after that we re-fetch, but fall back to the old copy if
+ * the server is unreachable.
+ */
+async function loadManifest(candidates) {
+  const key = candidates.join(" ");
+  const cached = await cacheGet(key);
+  if (cached && Date.now() - cached.at < MANIFEST_TTL_MS) return cached;
+  try {
+    const fresh = await fetchFirstManifest(candidates);
+    cacheSet(key, { ...fresh, at: Date.now() });
+    return fresh;
+  } catch (err) {
+    if (cached) return cached;
+    throw err;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Small utilities
@@ -206,7 +307,7 @@ class Book {
       this._loading = manifestSlots(async () => {
         const candidates = resolveInput(this.input);
         if (!candidates.length) throw new Error(inputHint(this.input) || "That doesn't look like a URL or an identifier.");
-        const { url, json } = await fetchFirstManifest(candidates);
+        const { url, json } = await loadManifest(candidates);
         this.manifestUrl = url;
         this.data = parseManifest(json);
         if (!this.title) this.title = this.data.label;
@@ -231,6 +332,8 @@ class Book {
 
 const shelfEl = $("#shelf");
 const cards = new Set();
+// Visitors whose browser asks to save data get the lightest scrub by default.
+if (navigator.connection && navigator.connection.saveData) $("#density").value = "12";
 let density = Number($("#density").value);
 let flashTimer = null;
 
@@ -368,7 +471,7 @@ class Card {
     const prev = this.ticks.children[this.current];
     if (prev) prev.classList.remove("is-current");
     this.current = j;
-    if (this.img.getAttribute("src") !== this.reel.urls[j]) this.img.src = this.reel.urls[j];
+    setImg(this.img, this.reel.urls[j]);
     const tick = this.ticks.children[j];
     if (tick) tick.classList.add("is-current");
     this.counter.textContent = `p. ${this.reel.pages[j] + 1} / ${this.book.total}`;
@@ -470,7 +573,7 @@ class Card {
 
   // Flash mode: advance to the next page we already have.
   flashStep() {
-    if (!this.visible || !this.reel || this.cover.classList.contains("is-scrubbing")) return;
+    if (document.hidden || !this.visible || !this.reel || this.cover.classList.contains("is-scrubbing")) return;
     this.preload();
     if (this.loaded.size < 2) return;
     this.cover.classList.add("is-flashing");
@@ -750,7 +853,7 @@ function viewerDisplay(i) {
   const hit = nearestAvailable(i);
   if (!hit) return;
   stageLoading.hidden = true;
-  if (stageImg.getAttribute("src") !== hit.url) stageImg.src = hit.url;
+  setImg(stageImg, hit.url);
   const page = V.frames[hit.j];
   const p = V.live && V.book.data.pages[page];
   const label = p && p.label && !/^\d+$/.test(p.label) ? ` · ${p.label}` : "";
@@ -933,6 +1036,11 @@ gifBtn.addEventListener("click", async () => {
   const width = Number($("#gif-width").value);
   const delay = Number($("#gif-delay").value);
   const urls = gifSources(n, width);
+  if (urls.some((u) => hosts.get(hostOf(u))?.cors === false)) {
+    gifError.textContent =
+      "This library's image server doesn't let other websites re-use its images (no CORS headers), so a GIF can't be made in the browser for this item. The scrubber still works!";
+    return;
+  }
   const height = Math.round(width * medianAspect(V.live ? V.book.data.pages : []));
 
   const bar = $(".progress-bar", gifProgress);
@@ -994,6 +1102,11 @@ function openFromHash() {
   const existing = [...cards].find((c) => c.book.input === input);
   if (existing) openViewer(existing.book);
   else shelveInput(input, { open: true });
+}
+
+// Long-lived image cache for returning visitors (see sw.js). Optional.
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
 await loadBaked();

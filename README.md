@@ -76,10 +76,16 @@ Before baking, check that you're comfortable re-hosting thumbnails of each examp
 
 Each resized page costs a IIIF server a decode of its master file, so the app keeps requests down:
 
-- **At most 3 requests at a time per server.** A request still waiting in the queue is dropped as soon as nobody needs it.
-- **Hover intent.** A card starts loading its pages only after the mouse rests on it for 150ms, and stops queueing when the mouse leaves. Sweeping across the shelf costs nothing.
-- **Lazy viewer.** Opening a book fetches a 24-page overview at 300px, which reuses the shelf's images. After that it loads only small images near where you're scrubbing, plus one 800px image once you pause on a page. Closing the viewer drops everything still queued.
-- **Two fixed sizes.** Only `300,` and `800,` widths are ever requested, so repeat views hit browser and server caches. Small GIFs reuse images that are already loaded.
+- **Cheapest image first.** If a manifest lists a ready-made `thumbnail` of about the right size, that's used. Next come sizes the image server advertises as pre-rendered (`sizes`). Otherwise there are just two fixed widths, 300px and 800px, written in the canonical form for the server's Image API version (`w,h` for v3, `w,` for v2), so requests are more likely to hit caches other viewers have already warmed.
+- **At most 3 requests at a time per server,** dropping to 2 or 1 when a server responds slowly. A request still waiting in the queue is dropped as soon as nobody needs it.
+- **Backs off from failing servers.** After three failures in a row, that server's queue pauses for 2 seconds, doubling each time up to a minute.
+- **Hover intent.** A card starts loading its pages only after the mouse rests on it for 150ms, and stops queueing when the mouse leaves.
+- **Lazy viewer.** Opening a book loads a 24-page overview (the shelf's images), then small images near where you're scrubbing, plus one 800px image once you pause on a page. Closing it drops everything queued.
+- **Remembers what it fetched.**
+  - Manifests are kept in the browser (IndexedDB) for a week. If a refresh fails, the old copy is used.
+  - A service worker (`sw.js`) keeps page images from CORS-enabled servers for 30 days, capped at 1,500, even when a server's own cache headers are short.
+  - Small GIFs reuse images that are already loaded.
+- **Stops when nobody's watching.** Playback, flash mode and the request queue pause while the tab is hidden. Browsers set to save data get 12 pages per scrub by default.
 - **Baked shelf.** See above.
 
 Measured against a fake IIIF server (with cache headers) in headless Chrome:
@@ -96,6 +102,24 @@ Measured against a fake IIIF server (with cache headers) in headless Chrome:
 | Fast mouse sweep across the viewer | about 23 |
 | 300px GIF (16 frames) | 0 (reuses loaded images) |
 | 480px GIF (16 frames) | about 14 |
+| Reloading or reopening the page | 0 manifest requests (a week's cache) |
+| Second visit to a server that forbids caching | 0 (service worker) |
+| Manifest that lists ready-made thumbnails | shelf uses them: 0 resize requests |
+| Server that always fails | about 1 request a second, then less |
+| Slow server (3s per image) | drops to 1 request at a time |
+| Tab hidden | 0 |
+
+## For IIIF server administrators
+
+Book Scrubber is a static web page. Everything runs in visitors' browsers, so requests come from their IP addresses, carrying this site's address in the `Referer` header. What it asks your server for:
+
+- The manifest, once per book per visitor per week.
+- Page images at 300px wide (shelf thumbnails and viewer overview), and at 800px for the page a viewer pauses on. A ready-made `thumbnail` or advertised `sizes` in your manifest are used instead when they're close to those widths. The quickest way to cut Book Scrubber's cost to your server is to publish either one.
+- At most 3 requests at a time from any one browser, fewer if you're slow, pausing if you return errors. Nothing is requested for books a visitor isn't looking at.
+
+The example shelf's thumbnails are downloaded once, by the "Bake example shelf" GitHub Action (User-Agent `book-scrubber example baker`), and served from this repository.
+
+If Book Scrubber is causing you trouble, or you'd rather your collection not appear on the example shelf, please [open an issue](https://github.com/hadro/book-scrubber/issues) and it will be dealt with promptly.
 
 ## Known limits
 

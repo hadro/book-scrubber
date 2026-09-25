@@ -106,7 +106,33 @@ test("parseManifest: level0 service uses a pre-baked size", () => {
     sizes: [{ width: 150, height: 200 }, { width: 250, height: 333 }, { width: 600, height: 800 }, { width: 1200, height: 1600 }],
   };
   const m = parseManifest(json);
-  assert.equal(pageImageUrl(m.pages[0], 300), "https://static.example.org/p0/full/600,/0/default.jpg");
+  assert.equal(pageImageUrl(m.pages[0], 300), "https://static.example.org/p0/full/250,/0/default.jpg");
+});
+
+test("pageImageUrl: canonical v3 sizes, advertised sizes, and thumbnails", () => {
+  const json = v3Manifest(1);
+  const body = json.items[0].items[0].items[0].body;
+  body.service[0].width = 2000;
+  body.service[0].height = 3000;
+  let page = parseManifest(json).pages[0];
+  assert.equal(pageImageUrl(page, 300), "https://img.example.org/iiif3/p0/full/300,450/0/default.jpg");
+  // Never ask for more than the full width.
+  body.service[0].width = 200;
+  body.service[0].height = 300;
+  page = parseManifest(json).pages[0];
+  assert.equal(pageImageUrl(page, 300), "https://img.example.org/iiif3/p0/full/200,300/0/default.jpg");
+
+  // Advertised sizes win when one is close enough.
+  body.service[0].sizes = [{ width: 125, height: 188 }, { width: 500, height: 750 }, { width: 1000, height: 1500 }];
+  page = parseManifest(json).pages[0];
+  assert.equal(pageImageUrl(page, 300), "https://img.example.org/iiif3/p0/full/500,750/0/default.jpg");
+  assert.equal(pageImageUrl(page, 800), "https://img.example.org/iiif3/p0/full/1000,1500/0/default.jpg");
+
+  // A ready-made thumbnail of about the right size beats everything.
+  json.items[0].thumbnail = [{ id: "https://cdn.example.org/thumb0.jpg", type: "Image", width: 320, height: 480 }];
+  page = parseManifest(json).pages[0];
+  assert.equal(pageImageUrl(page, 300), "https://cdn.example.org/thumb0.jpg");
+  assert.notEqual(pageImageUrl(page, 800), "https://cdn.example.org/thumb0.jpg");
 });
 
 test("parseManifest: rejects collections and empty manifests", () => {

@@ -2,19 +2,14 @@ import { GIFEncoder, quantize, applyPalette } from "../vendor/gifenc.esm.js";
 
 /** Load an image with CORS so it can be drawn to a canvas and read back. */
 function loadCorsImage(url) {
-  const attempt = (src) =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.decoding = "async";
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Couldn't load ${src}`));
-      img.src = src;
-    });
-  // A copy of the image may already be cached from a plain (non-CORS) <img>,
-  // which some browsers will reuse and then refuse to share. Retry once with
-  // a cache-busting query string if the first try fails.
-  return attempt(url).catch(() => attempt(url + (url.includes("?") ? "&" : "?") + "cors=1"));
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.decoding = "async";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Couldn't load ${url}`));
+    img.src = url;
+  });
 }
 
 function loadsWithoutCors(url) {

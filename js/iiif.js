@@ -139,7 +139,7 @@ export function labelText(label) {
 }
 
 function describeService(svc) {
-  const s = asArray(svc).find((x) => x && typeof x === "object") ;
+  const s = asArray(svc).find((x) => x && typeof x === "object");
   if (!s) return null;
   const id = idOf(s);
   if (!id) return null;
@@ -148,39 +148,53 @@ function describeService(svc) {
   const profile = JSON.stringify(s.profile || "");
   let version = 2;
   if (/ImageService3/.test(type) || /image\/3/.test(ctx)) version = 3;
-  let level = 2;
-  if (/level0/.test(profile) || /level0/.test(String(s.profile || ""))) level = 0;
-  return { id: id.replace(/\/info\.json$/, "").replace(/\/$/, ""), version, level, sizes: s.sizes || null };
+  const level = /level0/.test(profile) ? 0 : 2;
+  return {
+    id: id.replace(/\/info\.json$/, "").replace(/\/$/, ""),
+    version,
+    level,
+    width: s.width || null,
+    height: s.height || null,
+    sizes: Array.isArray(s.sizes) ? s.sizes.filter((z) => z && z.width) : null,
+  };
+}
+
+/** A canvas thumbnail as {url, width, height}, if the manifest offers one. */
+function describeThumb(thumb) {
+  const t = asArray(thumb)[0];
+  if (!t) return null;
+  const url = idOf(t);
+  if (!url) return null;
+  return { url, width: (t && t.width) || null, height: (t && t.height) || null };
+}
+
+function makePage(canvas, body) {
+  const service = describeService(body && body.service);
+  return {
+    label: labelText(canvas.label),
+    width: canvas.width,
+    height: canvas.height,
+    // Pixel size of the actual image (not the canvas), when stated.
+    imgWidth: (service && service.width) || (body && body.width) || null,
+    imgHeight: (service && service.height) || (body && body.height) || null,
+    service,
+    imageUrl: idOf(body),
+    thumb: describeThumb(canvas.thumbnail),
+  };
 }
 
 function pageFromV2Canvas(canvas) {
   const image = asArray(canvas.images)[0];
   const res = image && image.resource;
-  const choice = res && (res.default || res);
-  return {
-    label: labelText(canvas.label),
-    width: canvas.width,
-    height: canvas.height,
-    service: describeService(choice && choice.service),
-    imageUrl: idOf(choice),
-    thumbnail: idOf(asArray(canvas.thumbnail)[0]),
-  };
+  return makePage(canvas, res && (res.default || res));
 }
 
 function pageFromV3Canvas(canvas) {
   const page = asArray(canvas.items)[0];
   const anno = page && asArray(page.items)[0];
-  let body = anno && anno.body;
-  body = asArray(body)[0];
+  let body = asArray(anno && anno.body)[0];
   if (body && body.type === "Choice") body = asArray(body.items)[0];
-  return {
-    label: labelText(canvas.label),
-    width: canvas.width,
-    height: canvas.height,
-    service: describeService(body && body.service),
-    imageUrl: idOf(body),
-    thumbnail: idOf(asArray(canvas.thumbnail)[0]),
-  };
+  return makePage(canvas, body);
 }
 
 /** Flatten a v2 or v3 manifest into {label, pages[], rtl, attribution}. */
@@ -232,22 +246,49 @@ export function parseManifest(json) {
 export const SMALL = 300;
 export const BIG = 800;
 
+function sizeUrl(svc, w, h) {
+  // Canonical size syntax: "w,h" for Image API 3, "w," for 2. Caches key on
+  // the exact URL, so matching what other viewers ask for means more hits.
+  const size = svc.version === 3 && h ? `${w},${h}` : `${w},`;
+  return `${svc.id}/full/${size}/0/default.jpg`;
+}
+
 /**
- * URL for a page image `width` pixels wide (width-only IIIF size, "w,").
+ * URL for a page image about `width` pixels wide, cheapest option first:
+ *   1. a ready-made canvas thumbnail of roughly that size (often a static file),
+ *   2. a size the image server advertises as pre-rendered,
+ *   3. exactly `width`, in canonical form.
  * Falls back to the raw image URL when there's no usable Image API service.
  */
 export function pageImageUrl(page, width) {
+  const fits = (w) => w >= width * 0.8 && w <= width * 2.5;
+  const t = page.thumb;
+  if (t && t.width && fits(t.width)) return t.url;
+
   const svc = page.service;
-  if (svc && svc.level !== 0) {
-    return `${svc.id}/full/${width},/0/default.jpg`;
+  if (svc) {
+    if (svc.sizes && svc.sizes.length) {
+      const sorted = [...svc.sizes].sort((a, b) => a.width - b.width);
+      const fit = sorted.find((z) => z.width >= width * 0.8);
+      if (fit && fits(fit.width)) return sizeUrl(svc, fit.width, fit.height);
+      if (svc.level === 0) {
+        const z = fit || sorted[sorted.length - 1];
+        return sizeUrl(svc, z.width, z.height);
+      }
+    }
+    if (svc.level !== 0) {
+      const W = page.imgWidth;
+      const H = page.imgHeight;
+      const w = W ? Math.min(width, W) : width;
+      const h = W && H ? Math.round((w * H) / W) : null;
+      return sizeUrl(svc, w, h);
+    }
   }
-  if (svc && svc.level === 0 && Array.isArray(svc.sizes) && svc.sizes.length) {
-    // Level 0 servers only serve pre-made sizes: pick the smallest that's wide enough.
-    const sorted = [...svc.sizes].sort((a, b) => a.width - b.width);
-    const fit = sorted.find((s) => s.width >= width) || sorted[sorted.length - 1];
-    return `${svc.id}/full/${fit.width},${svc.version === 3 ? fit.height : ""}/0/default.jpg`;
-  }
-  return (width <= SMALL && page.thumbnail) || page.imageUrl || (svc && `${svc.id}/full/full/0/default.jpg`);
+  return (
+    (width <= SMALL && t && t.url) ||
+    page.imageUrl ||
+    (svc && `${svc.id}/full/${svc.version === 3 ? "max" : "full"}/0/default.jpg`)
+  );
 }
 
 /** Pick `n` evenly spaced indices from [0, total). Always includes first and last. */
