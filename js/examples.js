@@ -66,6 +66,12 @@ export const EXAMPLES = [
     input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
   },
   {
+    // Title comes from the manifest.
+    source: "getty",
+    note: "Getty Museum album",
+    input: "https://media.getty.edu/iiif/manifest/3/01b5ac79-78d9-4900-a51b-5ba13c19b6de",
+  },
+  {
     source: "ia",
     title: "Alice's Adventures in Wonderland",
     note: "Carroll & Tenniel",
