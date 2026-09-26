@@ -17,18 +17,24 @@ export const SOURCES = {
 };
 
 export const EXAMPLES = [
-  {
-    source: "ia",
-    title: "Kunstformen der Natur",
-    note: "Haeckel, 1904",
-    input: "https://archive.org/details/kunstformenderna00haec",
-  },
+  // {
+  //   source: "ia",
+  //   title: "Kunstformen der Natur",
+  //   note: "Haeckel, 1904",
+  //   input: "https://archive.org/details/kunstformenderna00haec",
+  // },
   // {
   //   source: "loc",
   //   title: "The Wonderful Wizard of Oz",
   //   note: "Baum & Denslow, 1900",
   //   input: "https://www.loc.gov/item/03032405/",
   // },
+  {
+    source: "ia",
+    title: "National Directory of Morticians",
+    note: "1949",
+    input: "https://archive.org/details/nationaldirectornati/"
+  },
   {
     // Title comes from the manifest.
     source: "loc",
