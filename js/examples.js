@@ -22,11 +22,17 @@ export const EXAMPLES = [
     note: "Haeckel, 1904",
     input: "https://archive.org/details/kunstformenderna00haec",
   },
+  // {
+  //   source: "loc",
+  //   title: "The Wonderful Wizard of Oz",
+  //   note: "Baum & Denslow, 1900",
+  //   input: "https://www.loc.gov/item/03032405/",
+  // },
   {
+    // Title comes from the manifest.
     source: "loc",
-    title: "The Wonderful Wizard of Oz",
-    note: "Baum & Denslow, 1900",
-    input: "https://www.loc.gov/item/03032405/",
+    note: "Library of Congress",
+    input: "https://www.loc.gov/item/73644404/",
   },
   {
     source: "nypl",
@@ -85,6 +91,12 @@ export const EXAMPLES = [
     source: "getty",
     note: "Getty Museum album",
     input: "https://media.getty.edu/iiif/manifest/3/01b5ac79-78d9-4900-a51b-5ba13c19b6de",
+  },
+  {
+    // Title comes from the manifest.
+    source: "getty",
+    note: "Getty Museum album",
+    input: "https://media.getty.edu/iiif/manifest/3/d4ce5921-731f-4347-945a-bafd815da340",
   },
   {
     source: "ia",
