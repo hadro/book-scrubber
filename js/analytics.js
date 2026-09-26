@@ -2,7 +2,7 @@
 //
 // To turn it on, set GOATCOUNTER_CODE to your site code, i.e. the "mycode" in
 // https://mycode.goatcounter.com. While it's empty nothing is loaded or sent.
-export const GOATCOUNTER_CODE = "";
+export const GOATCOUNTER_CODE = "book-scrubber";
 
 const queue = [];
 let ready = false;
