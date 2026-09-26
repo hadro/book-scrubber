@@ -17,12 +17,25 @@ export const SOURCES = {
 };
 
 export const EXAMPLES = [
-  // {
-  //   source: "ia",
-  //   title: "Kunstformen der Natur",
-  //   note: "Haeckel, 1904",
-  //   input: "https://archive.org/details/kunstformenderna00haec",
-  // },
+  {
+        source: "loc",
+    title: "The Florentine Codex: General History of the Things of New Spain by Fray Bernardino de Sahagún",
+    note: " Volume 1, 1577",
+    input: "https://www.loc.gov/item/2021667837/",
+    
+  },
+    {
+    source: "yale",
+    title: "Voynich manuscript",
+    note: "Beinecke MS 408 · 15th century",
+    input: "https://collections.library.yale.edu/manifests/2002046",
+  },
+  {
+    source: "ia",
+    title: "Kunstformen der Natur",
+    note: "Haeckel, 1904",
+    input: "https://archive.org/details/kunstformenderna00haec",
+  },
   // {
   //   source: "loc",
   //   title: "The Wonderful Wizard of Oz",
@@ -41,16 +54,16 @@ export const EXAMPLES = [
     note: "Library of Congress",
     input: "https://www.loc.gov/item/73644404/",
   },
-  {
-    // The Florentine Codex via the Library of Congress (formerly World Digital
-    // Library). The Getty's Digital Florentine Codex site has no public
-    // manifests; the whole codex is loc.gov/item/2021667837/, and each of its
-    // twelve Books also has its own record.
-    source: "loc",
-    title: "Florentine Codex, Book XII: The Conquest of Mexico",
-    note: "Sahagún, 1577",
-    input: "https://www.loc.gov/item/2021667857/",
-  },
+  // {
+  //   // The Florentine Codex via the Library of Congress (formerly World Digital
+  //   // Library). The Getty's Digital Florentine Codex site has no public
+  //   // manifests; the whole codex is loc.gov/item/2021667837/, and each of its
+  //   // twelve Books also has its own record.
+  //   source: "loc",
+  //   title: "Florentine Codex, Book XII: The Conquest of Mexico",
+  //   note: "Sahagún, 1577",
+  //   input: "https://www.loc.gov/item/2021667857/",
+  // },
   {
     source: "getty",
     title: "[The Overstone Album: portraits, tableaux, and noted personalities]",
@@ -102,13 +115,13 @@ export const EXAMPLES = [
     input:
       "https://library.nga.gov/discovery/fulldisplay?context=L&vid=01NGA_INST:NGA&search_scope=MainLibrary&tab=MainLibrary&lang=en&docid=alma99826713504896",
   },
- // {
- //   source: "getty",
- //   title: "Japanese Album",
- //   note: "Kusakabe Kimbei, 1870s–1890s",
- //   input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
- //   page: "https://www.getty.edu/art/collection/object/104GAQ",
- // },
+ {
+   source: "getty",
+   title: "Japanese Album",
+   note: "Kusakabe Kimbei, 1870s–1890s",
+   input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
+   page: "https://www.getty.edu/art/collection/object/104GAQ",
+ },
   {
     source: "getty",
     title: "Egypt and Palestine",
@@ -121,18 +134,12 @@ export const EXAMPLES = [
   //  note: "Carroll & Tenniel",
   //  input: "https://archive.org/details/carroll-lewis-alices-adventures-in-wonderland-illustrated-by-tenniel-john.-v-1.0",
   //},
-  {
-    source: "getty",
-    title: "The Keramic Gallery",
-    note: "600 illustrations of pottery & porcelain",
-    input: "https://media.getty.edu/iiif/manifest/3/d4ce5921-731f-4347-945a-bafd815da340",
-  },
-  {
-    source: "yale",
-    title: "Voynich manuscript",
-    note: "Beinecke MS 408 · 15th century",
-    input: "https://collections.library.yale.edu/manifests/2002046",
-  },
+  // {
+  //   source: "getty",
+  //   title: "The Keramic Gallery",
+  //   note: "600 illustrations of pottery & porcelain",
+  //   input: "https://media.getty.edu/iiif/manifest/3/d4ce5921-731f-4347-945a-bafd815da340",
+  // },
   {
     source: "ecod",
     title: "St. Gallen, Cod. Sang. 40",
