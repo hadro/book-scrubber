@@ -34,6 +34,17 @@ const MANIFEST_TTL_MS = 7 * 24 * 3600 * 1000; // re-check remembered manifests w
 const $ = (sel, root = document) => root.querySelector(sel);
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+/** Tell screen-reader users about something that changed visually (polite, debounced). */
+let announceTimer = null;
+function announce(text) {
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => {
+    const el = $("#sr-status");
+    el.textContent = "";
+    requestAnimationFrame(() => (el.textContent = text));
+  }, 150);
+}
+
 // ---------------------------------------------------------------------------
 // Image loading: per-host queues, shared cache, cancellable while queued
 // ---------------------------------------------------------------------------
@@ -448,9 +459,13 @@ class Card {
     if (book.removable) {
       const rm = $(".card-remove", el);
       rm.hidden = false;
-      rm.addEventListener("click", () => removeCard(this));
+      rm.addEventListener("click", () => {
+        announce(`Removed ${this.book.title || "book"} from the shelf`);
+        removeCard(this);
+      });
     }
 
+    this.cover.setAttribute("aria-busy", "true");
     this.bindPointer();
   }
 
@@ -461,7 +476,11 @@ class Card {
     const p = this.book.part;
     const part = p && p.of > 1 ? `${p.label || "part 1"} (1 of ${p.of})` : "";
     $(".card-note", this.el).textContent = [this.book.note, part, pages].filter(Boolean).join(" · ");
-    this.cover.setAttribute("aria-label", `${this.book.title || "Book"}: open book`);
+    const title = this.book.title || "Book";
+    this.cover.setAttribute("aria-label", this.failed ? `${title}: couldn't load` : `${title}: open book`);
+    $(".card-title", this.el).title = this.book.title || "";
+    const rm = $(".card-remove", this.el);
+    rm.setAttribute("aria-label", `Remove ${title} from the shelf`);
     const page = $(".card-link-page", this.el);
     page.hidden = !this.book.itemPage;
     if (!page.hidden) page.href = this.book.itemPage;
@@ -514,6 +533,7 @@ class Card {
         this.show(0, true);
         this.img.classList.add("is-ready");
         this.cover.classList.add("is-loaded-cover");
+        this.cover.removeAttribute("aria-busy");
       })
       .catch(() => this.showError(new Error("The first page image wouldn't load.")));
   }
@@ -675,6 +695,7 @@ class Card {
         const next = Math.min(this.reel.pages.length - 1, Math.max(0, (this.wanted ?? this.current) + step));
         this.wanted = next;
         this.show(next);
+        announce(this.counter.textContent.replace("p.", "Page").replace(" / ", " of ").replace(" · plates", ", plates only"));
       }
     });
     c.addEventListener("blur", () => {
@@ -697,6 +718,8 @@ class Card {
     this.errorEl.append(big, msg, detail);
     this.errorEl.title = String((err && err.message) || err);
     this.cover.classList.add("is-loaded-cover");
+    this.cover.removeAttribute("aria-busy");
+    this.cover.setAttribute("aria-label", `${this.book.title || this.book.note || "Book"}: couldn't load. ${friendlyError(err)}`);
     this.cover.style.cursor = "help";
     if (!this.book.title) $(".card-title", this.el).textContent = this.book.note || this.book.input;
   }
@@ -785,6 +808,8 @@ const pasteStatus = $("#paste-status");
 function setStatus(text, isError = false) {
   pasteStatus.textContent = text;
   pasteStatus.classList.toggle("is-error", isError);
+  if (isError) pasteInput.setAttribute("aria-invalid", "true");
+  else pasteInput.removeAttribute("aria-invalid");
 }
 
 /** Anonymous label for analytics: example title, or just the host for pasted books. */
@@ -1170,6 +1195,17 @@ function stopPlay() {
 }
 
 playBtn.addEventListener("click", () => (V.playing ? stopPlay() : startPlay()));
+for (const [id, delta] of [["#prev-btn", -1], ["#next-btn", 1]]) {
+  $(id).addEventListener("click", () => {
+    stopPlay();
+    viewerStep(delta);
+    announceViewerPage();
+  });
+}
+
+function announceViewerPage() {
+  if (V.frames.length) announce(`Page ${V.frames[V.wanted] + 1} of ${V.book.total}`);
+}
 speed.addEventListener("input", () => {
   speedOut.textContent = `${speed.value} fps`;
   if (V.playing) startPlay();
@@ -1204,6 +1240,7 @@ viewer.addEventListener("keydown", (e) => {
     e.preventDefault();
     stopPlay();
     viewerStep((e.key === "ArrowRight") !== rtl ? 1 : -1);
+    announceViewerPage();
   } else if (e.key === " " && !e.target.matches("button, a")) {
     e.preventDefault();
     V.playing ? stopPlay() : startPlay();
@@ -1262,7 +1299,26 @@ function resetGifUi() {
   gifBtn.textContent = `Make ${FORMAT_LABEL[gifFormat.value]}`;
   if (V.gifUrl) URL.revokeObjectURL(V.gifUrl);
   V.gifUrl = null;
+  $("#gif-pause").hidden = true;
 }
+
+// Animated previews loop forever, so they need a pause control (WCAG 2.2.2).
+$("#gif-pause").addEventListener("click", (e) => {
+  const img = $("#gif-img");
+  if (img.dataset.paused) {
+    img.src = V.gifUrl;
+    delete img.dataset.paused;
+    e.target.textContent = "Pause preview";
+  } else {
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    c.getContext("2d").drawImage(img, 0, 0);
+    img.src = c.toDataURL();
+    img.dataset.paused = "1";
+    e.target.textContent = "Play preview";
+  }
+});
 
 function medianAspect(pages) {
   const ratios = pages.filter((p) => p.width && p.height).map((p) => p.height / p.width).sort((a, b) => a - b);
@@ -1356,6 +1412,7 @@ gifBtn.addEventListener("click", async () => {
   gifProgress.hidden = false;
   gifBtn.disabled = true;
   gifBtn.textContent = "Cooking…";
+  announce(`Making ${FORMAT_LABEL[format]}…`);
   const abort = new AbortController();
   V.gifAbort = abort;
   const background = getComputedStyle(document.documentElement).getPropertyValue("--paper").trim() || "#f6efe2";
@@ -1389,7 +1446,12 @@ gifBtn.addEventListener("click", async () => {
     const what = format === "sheet" ? `${images.length} pages` : `${width}×${height} · ${images.length} frames`;
     $("#gif-size").textContent = `${what} · ${Math.round(blob.size / 1024)} KB`;
     gifResult.dataset.sources = urls.join(" ");
+    const pause = $("#gif-pause");
+    pause.hidden = format !== "gif";
+    pause.textContent = "Pause preview";
+    delete img.dataset.paused;
     gifResult.hidden = false;
+    announce(`Your ${FORMAT_LABEL[format]} is ready: ${Math.round(blob.size / 1024)} kilobytes. The download link is below the preview.`);
     gifProgress.hidden = true;
   } catch (err) {
     if (err.name !== "AbortError") {
