@@ -12,6 +12,7 @@ import {
   collectionMembers,
   isCollection,
   itemPageFromUrl,
+  followToManifest,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -98,8 +99,9 @@ test("parseManifest: Presentation v3 with ImageService3, RTL", () => {
 test("parseManifest: v3 canvas without an image service falls back to the raw image", () => {
   const json = v3Manifest(2);
   delete json.items[1].items[0].items[0].body.service;
+  json.items[1].items[0].items[0].body.id = "https://img.example.org/plain/p1.jpg";
   const m = parseManifest(json);
-  assert.equal(pageImageUrl(m.pages[1], 300), "https://img.example.org/iiif3/p1/full/max/0/default.jpg");
+  assert.equal(pageImageUrl(m.pages[1], 300), "https://img.example.org/plain/p1.jpg");
 });
 
 test("parseManifest: level0 service uses a pre-baked size", () => {
@@ -207,7 +209,65 @@ test("item pages are derived from manifest and catalog URLs", () => {
     "https://library.nga.gov/discovery/fulldisplay?vid=01NGA_INST:NGA&docid=alma99826713504896"
   );
   assert.equal(itemPageFromUrl("https://archive.org/details/foo"), "https://archive.org/details/foo");
+  assert.equal(itemPageFromUrl("https://collections.library.yale.edu/manifests/2002046"), "https://collections.library.yale.edu/catalog/2002046");
+  // The link as pasted from Yale's viewer resolves to the same manifest.
+  assert.deepEqual(resolveInput("https://collections.library.yale.edu/manifests/2002046?manifest=https://collections.library.yale.edu/manifests/2002046"), [
+    "https://collections.library.yale.edu/manifests/2002046",
+  ]);
   assert.equal(itemPageFromUrl("kunstformenderna00haec"), "https://archive.org/details/kunstformenderna00haec");
   assert.equal(itemPageFromUrl("https://media.getty.edu/iiif/manifest/3/ad56409c"), null);
   assert.equal(itemPageFromUrl("https://example.org/iiif/book/manifest.json"), null);
+});
+
+test("followToManifest: plain manifests pass through, collections open their first part", async () => {
+  const m = v3Manifest(3);
+  const plain = await followToManifest({ url: "https://x.org/m", json: m }, async () => assert.fail("no fetch needed"));
+  assert.equal(plain.part, null);
+  assert.equal(plain.json, m);
+
+  const coll = { type: "Collection", label: { en: ["Woods directory"] }, items: [
+    { id: "https://x.org/1911", type: "Manifest", label: { en: ["1911"] } },
+    { id: "https://x.org/1912", type: "Manifest", label: { en: ["1912"] } },
+    { id: "https://x.org/1913", type: "Manifest", label: { en: ["1913"] } },
+  ] };
+  const fetched = [];
+  const out = await followToManifest({ url: "https://x.org/item", json: coll }, async (u) => (fetched.push(u), { url: u, json: m }));
+  assert.deepEqual(fetched, ["https://x.org/1911"]);
+  assert.equal(out.url, "https://x.org/1911");
+  assert.deepEqual(out.part, { collection: "Woods directory", label: "1911", index: 1, of: 3 });
+
+  // Nested: a collection of collections.
+  const outer = { type: "Collection", label: "Outer", items: [{ id: "https://x.org/inner", type: "Collection", label: "Inner" }] };
+  const nested = await followToManifest({ url: "https://x.org/outer", json: outer }, async (u) =>
+    u.endsWith("inner") ? { url: u, json: coll } : { url: u, json: m }
+  );
+  assert.equal(nested.url, "https://x.org/1911");
+
+  await assert.rejects(followToManifest({ url: "x", json: { type: "Collection", items: [] } }, async () => ({})), /doesn't list any items/);
+});
+
+test("Choice bodies: prefer the option with a service, then a web format", () => {
+  const json = v3Manifest(1);
+  const anno = json.items[0].items[0].items[0];
+  anno.body = {
+    type: "Choice",
+    items: [
+      { id: "https://x.org/p0.tif", type: "Image", format: "image/tiff" },
+      { id: "https://x.org/p0.jpg", type: "Image", format: "image/jpeg", service: [{ id: "https://x.org/iiif/p0", type: "ImageService2" }] },
+    ],
+  };
+  assert.equal(pageImageUrl(parseManifest(json).pages[0], 300), "https://x.org/iiif/p0/full/300,/0/default.jpg");
+  anno.body.items[1] = { id: "https://x.org/p0.jpg", type: "Image", format: "image/jpeg" };
+  assert.equal(parseManifest(json).pages[0].imageUrl, "https://x.org/p0.jpg");
+});
+
+test("a IIIF image URL without a listed service still gets resized", () => {
+  const json = v3Manifest(1);
+  const body = json.items[0].items[0].items[0].body;
+  delete body.service;
+  body.id = "https://tile.example.gov/image-services/iiif/service:rbc:x:0001/full/pct:100/0/default.jpg";
+  assert.equal(
+    pageImageUrl(parseManifest(json).pages[0], 300),
+    "https://tile.example.gov/image-services/iiif/service:rbc:x:0001/full/300,/0/default.jpg"
+  );
 });

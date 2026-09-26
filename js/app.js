@@ -4,6 +4,7 @@ import {
   itemPageFromUrl,
   isCollection,
   collectionMembers,
+  followToManifest,
   fetchFirstManifest,
   parseManifest,
   pageImageUrl,
@@ -19,9 +20,12 @@ import { initAnalytics, track } from "./analytics.js";
 import { analyzeImage } from "./analyze.js";
 
 const STAGE_MAX_FRAMES = 150;
+const REEL_MAX = 150; // most frames a shelf card will hold (or one per pixel of card width, if wider)
 const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
 const PER_HOST = 3; // simultaneous image requests per server
 const HOVER_INTENT_MS = 150; // ignore mouse fly-bys shorter than this
+const KEEP_LOADING_MS = 600; // after a hover this long, finish loading the card even once the mouse leaves
+const MIN_PLATES = 3; // plates-only needs at least this many plates on a card, else it shows all non-blank pages
 const DWELL_MS = 200; // only fetch big images once scrubbing pauses
 const STORAGE_KEY = "book-scrubber:shelf";
 const MANIFEST_TTL_MS = 7 * 24 * 3600 * 1000; // re-check remembered manifests weekly
@@ -343,10 +347,12 @@ class Book {
       this._loading = manifestSlots(async () => {
         const candidates = resolveInput(this.input);
         if (!candidates.length) throw new Error(inputHint(this.input) || "That doesn't look like a URL or an identifier.");
-        const { url, json } = await loadManifest(candidates);
+        // Multi-part records can resolve to a collection: take its first part.
+        const { url, json, part } = await followToManifest(await loadManifest(candidates), (u) => loadManifest([u]));
         this.manifestUrl = url;
         this.data = parseManifest(json);
-        if (!this.title) this.title = this.data.label;
+        this.part = part;
+        if (!this.title) this.title = (part && part.collection) || this.data.label;
         return this.data;
       });
       this._loading.catch(() => {});
@@ -354,11 +360,38 @@ class Book {
     return this._loading;
   }
 
-  /** The frames a shelf card scrubs through: baked files if we have them, else live thumbnails. */
-  reel(density) {
-    if (this.baked) return { pages: this.baked.pages, urls: this.baked.files, baked: true };
-    const pages = sampleIndices(this.data.pages.length, density);
-    return { pages, urls: pages.map((i) => pageImageUrl(this.data.pages[i], SMALL)), baked: false };
+  /**
+   * The frames a shelf card scrubs through. Each frame lists every URL that
+   * shows that page (baked file, 300px, 800px); whichever is already loaded
+   * gets used. `fetch` marks the sampled frames the card may download itself.
+   * Pages already loaded elsewhere (usually by the viewer) are added as extra
+   * frames for free. At most `max` frames in all: if more pages are loaded
+   * than that, the extras are picked evenly across the whole book.
+   */
+  reel(density, max = REEL_MAX) {
+    const live = this.data && this.data.pages;
+    const liveUrls = (p) => (live ? [pageImageUrl(live[p], SMALL), pageImageUrl(live[p], BIG)] : []);
+    const frames = new Map(); // page -> { cands, fetch }
+    if (this.baked) this.baked.pages.forEach((p, k) => frames.set(p, { cands: [this.baked.files[k], ...liveUrls(p)], fetch: true }));
+    else for (const p of sampleIndices(live.length, density)) frames.set(p, { cands: liveUrls(p), fetch: true });
+    if (live) {
+      const extras = [];
+      for (let p = 0; p < live.length; p++) {
+        if (frames.has(p)) continue;
+        const cands = liveUrls(p);
+        if (cands.some((u) => loadedUrls.has(u))) extras.push([p, cands]);
+      }
+      const room = Math.max(0, max - frames.size);
+      const keep = extras.length > room ? sampleIndices(extras.length, room).map((k) => extras[k]) : extras;
+      for (const [p, cands] of keep) frames.set(p, { cands, fetch: false });
+    }
+    const pages = [...frames.keys()].sort((a, b) => a - b);
+    return {
+      pages,
+      cands: pages.map((p) => frames.get(p).cands),
+      fetch: new Set(pages.flatMap((p, i) => (frames.get(p).fetch ? [i] : []))),
+      baked: !!this.baked,
+    };
   }
 }
 
@@ -372,10 +405,8 @@ const cards = new Set();
 if (navigator.connection && navigator.connection.saveData) $("#density").value = "12";
 let density = Number($("#density").value);
 let flashTimer = null;
+// Plates-only and flash mode always start off: they're per-visit toggles, not settings.
 let platesOnly = false;
-try {
-  platesOnly = localStorage.getItem("book-scrubber:plates") === "1";
-} catch {}
 
 const visibility = new IntersectionObserver(
   (entries) => {
@@ -426,7 +457,9 @@ class Card {
     $(".card-title", this.el).textContent = this.book.title || "Loading…";
     const n = this.book.total;
     const pages = n ? `${n} ${n === 1 ? "image" : "pages"}` : "";
-    $(".card-note", this.el).textContent = [this.book.note, pages].filter(Boolean).join(" · ");
+    const p = this.book.part;
+    const part = p && p.of > 1 ? `${p.label || "part 1"} (1 of ${p.of})` : "";
+    $(".card-note", this.el).textContent = [this.book.note, part, pages].filter(Boolean).join(" · ");
     this.cover.setAttribute("aria-label", `${this.book.title || "Book"}: open flipbook`);
     const page = $(".card-link-page", this.el);
     page.hidden = !this.book.itemPage;
@@ -456,13 +489,25 @@ class Card {
     return this._init;
   }
 
+  /** A URL for frame i that's already loaded, if any. */
+  loadedUrl(i) {
+    return this.reel.cands[i].find((u) => loadedUrls.has(u));
+  }
+
   buildFrames() {
     this.stopPreload(true);
-    this.reel = this.book.reel(density);
+    // One frame per pixel of card width at most, so every frame can be reached by the mouse.
+    const width = Math.round(this.cover.getBoundingClientRect().width) || 0;
+    this.reel = this.book.reel(density, Math.max(REEL_MAX, width));
     this.loaded = new Set();
     this.ticks.replaceChildren(...this.reel.pages.map(() => document.createElement("i")));
+    // Anything already loaded (by the viewer, an earlier reel, the baked shelf) counts straight away.
+    this.reel.pages.forEach((_, i) => this.loadedUrl(i) && this.loaded.add(i));
+    [...this.loaded].forEach((i) => this.ticks.children[i].classList.add("is-loaded"));
+    this.refreshTicks();
 
-    loadImage(this.reel.urls[0], { front: true })
+    const cover = this.loadedUrl(0) || this.reel.cands[0][0];
+    loadImage(cover, { front: true })
       .then(() => {
         this.markLoaded(0);
         this.show(0, true);
@@ -478,8 +523,14 @@ class Card {
     this.ctl = new AbortController();
     const { signal } = this.ctl;
     const reel = this.reel;
-    for (const i of bisectionOrder(reel.urls.length)) {
-      loadImage(reel.urls[i], { signal })
+    for (const i of bisectionOrder(reel.pages.length)) {
+      if (this.loaded.has(i)) continue;
+      if (this.loadedUrl(i)) {
+        this.markLoaded(i);
+        continue;
+      }
+      if (!reel.fetch.has(i)) continue; // extra frames are never fetched just for the card
+      loadImage(reel.cands[i][0], { signal })
         .then(() => {
           if (this.reel !== reel) return;
           this.markLoaded(i);
@@ -503,7 +554,7 @@ class Card {
   }
 
   kindOf(i) {
-    const st = pageStats.get(this.reel.urls[i]);
+    const st = pageStats.get(this.loadedUrl(i) || this.reel.cands[i][0]);
     return st && st.kind;
   }
 
@@ -512,9 +563,15 @@ class Card {
     const nonBlank = [...this.loaded].filter((i) => this.kindOf(i) !== "blank");
     if (platesOnly) {
       const plates = nonBlank.filter((i) => this.kindOf(i) === "plate");
-      if (plates.length) return new Set(plates);
+      // A book with hardly any detected plates would leave an empty-looking card.
+      if (plates.length >= MIN_PLATES) return new Set(plates);
     }
     return new Set(nonBlank.length ? nonBlank : this.loaded);
+  }
+
+  /** Whether plates-only filtering is actually narrowing this card right now. */
+  platesActive() {
+    return platesOnly && [...this.loaded].filter((i) => this.kindOf(i) === "plate").length >= MIN_PLATES;
   }
 
   refreshTicks() {
@@ -539,10 +596,10 @@ class Card {
     const prev = this.ticks.children[this.current];
     if (prev) prev.classList.remove("is-current");
     this.current = j;
-    setImg(this.img, this.reel.urls[j]);
+    setImg(this.img, this.loadedUrl(j) || this.reel.cands[j][0]);
     const tick = this.ticks.children[j];
     if (tick) tick.classList.add("is-current");
-    this.counter.textContent = `p. ${this.reel.pages[j] + 1} / ${this.book.total}`;
+    this.counter.textContent = `p. ${this.reel.pages[j] + 1} / ${this.book.total}${this.platesActive() ? " · plates" : ""}`;
   }
 
   /** Scrub to a 0..1 position across the card. */
@@ -571,8 +628,10 @@ class Card {
       intent = null;
     };
 
+    let enteredAt = 0;
     c.addEventListener("pointerenter", (e) => {
       cancelIntent();
+      enteredAt = performance.now();
       // A mouse just passing over shouldn't trigger two dozen downloads.
       const delay = e.pointerType === "mouse" ? HOVER_INTENT_MS : 0;
       intent = setTimeout(() => this.init().then(() => this.preload(), () => {}), delay);
@@ -591,7 +650,9 @@ class Card {
     const leave = () => {
       startX = null;
       cancelIntent();
-      this.stopPreload();
+      // A deliberate look: let the card's reel finish in the background (still
+      // at most 3 requests at a time per server). A quick pass: drop what's queued.
+      if (performance.now() - enteredAt < KEEP_LOADING_MS) this.stopPreload();
       this.reset();
     };
     c.addEventListener("pointerup", () => (startX = null));
@@ -680,20 +741,18 @@ function removeCard(card) {
 $("#density").addEventListener("change", (e) => {
   density = Number(e.target.value);
   for (const card of cards) {
-    // Baked cards have a fixed reel; only live ones resample.
-    if (card.reel && !card.reel.baked) {
+    if (card.reel) {
       card.buildFrames();
       if (flashTimer) card.preload();
     }
   }
 });
 
-$("#plates-toggle").checked = platesOnly;
+// Browsers restore checkbox states on reload; reset them to match.
+$("#plates-toggle").checked = false;
+$("#flash-toggle").checked = false;
 $("#plates-toggle").addEventListener("change", (e) => {
   platesOnly = e.target.checked;
-  try {
-    localStorage.setItem("book-scrubber:plates", platesOnly ? "1" : "0");
-  } catch {}
   cards.forEach((c) => c.refreshTicks());
   if (platesOnly) track("plates-on", "Plates only on");
 });
@@ -1004,7 +1063,8 @@ async function openViewer(book, { page = null } = {}) {
   if (start != null) pages.add(start);
   setFrames([...pages].sort((a, b) => a - b), keepPage);
   const sampled = V.frames.length < d.pages.length ? ` · scrubbing ${V.frames.length} of them` : "";
-  viewerMeta.textContent = [`${d.pages.length} images${sampled}`, d.attribution].filter(Boolean).join(" · ");
+  const part = book.part && book.part.of > 1 ? `Showing part 1 of ${book.part.of}${book.part.label ? ` (${book.part.label})` : ""}` : "";
+  viewerMeta.textContent = [part, `${d.pages.length} images${sampled}`, d.attribution].filter(Boolean).join(" · ");
 
   // A coarse overview so the slider works end to end: the same small images the
   // shelf card uses (usually already cached), or nothing at all for baked books.
@@ -1154,6 +1214,13 @@ viewer.addEventListener("click", (e) => {
 });
 
 viewer.addEventListener("close", () => {
+  // Pages the viewer loaded become extra (free) frames on this book's shelf card.
+  for (const c of cards) {
+    if (c.book === V.book && c.reel) {
+      c.buildFrames();
+      if (flashTimer) c.preload();
+    }
+  }
   V.gen++;
   stopPlay();
   abortViewerRequests();
@@ -1181,7 +1248,9 @@ if (!videoMime()) gifFormat.querySelector('option[value="video"]').remove();
 const FORMAT_LABEL = { gif: "GIF", video: "video", sheet: "contact sheet" };
 gifFormat.addEventListener("change", () => {
   resetGifUi();
-  $("#gif-delay").disabled = gifFormat.value === "sheet";
+  const delay = $("#gif-delay");
+  delay.disabled = gifFormat.value === "sheet";
+  delay.title = delay.disabled ? "Contact sheets don't move, so there's no speed to set" : "";
 });
 
 function resetGifUi() {

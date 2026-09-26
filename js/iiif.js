@@ -154,6 +154,9 @@ export function itemPageFromUrl(raw) {
   if (host === "libraryimage.nga.gov" && (m = path.match(/^\/manifest\/mms\/(\d+)\.json$/))) {
     return `https://library.nga.gov/discovery/fulldisplay?vid=01NGA_INST:NGA&docid=alma${m[1]}`;
   }
+  if (host === "collections.library.yale.edu" && (m = path.match(/^\/manifests\/(\d+)/))) {
+    return `https://collections.library.yale.edu/catalog/${m[1]}`;
+  }
   // Not a manifest-looking address: it's probably the item page itself.
   if (!/manifest|\/iiif\/|\.json$/i.test(path + url.search)) return url.toString();
   return null;
@@ -181,12 +184,15 @@ export async function fetchFirstManifest(candidates, { signal } = {}) {
   const errors = [];
   for (const url of candidates) {
     try {
-      const res = await fetch(url, { signal, headers: { Accept: "application/ld+json, application/json" } });
+      // Give up on a manifest after 30 s rather than leaving a card loading forever.
+      const timeout = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
+      const res = await fetch(url, { signal: signal || timeout, headers: { Accept: "application/ld+json, application/json" } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return { url, json };
     } catch (err) {
       if (err.name === "AbortError") throw err;
+      if (err.name === "TimeoutError") err.message = "The server took too long to answer (30 s).";
       errors.push(`${url}: ${err.message}`);
     }
   }
@@ -243,8 +249,28 @@ function describeThumb(thumb) {
   return { url, width: (t && t.width) || null, height: (t && t.height) || null };
 }
 
+const WEB_IMAGE = /^image\/(jpeg|png|gif|webp)/;
+const IIIF_IMAGE_URL = /^(https?:\/\/.+?)\/full\/[^/]+\/\d+(?:\.\d+)?\/(?:default|native|color|gray|bitonal)\.(?:jpg|jpeg|png|gif|webp)(?:\?.*)?$/i;
+
+/** From several alternative images (a IIIF Choice), pick one a browser can show. */
+function pickChoice(items) {
+  const opts = asArray(items).filter(Boolean);
+  return (
+    opts.find((o) => o.service) ||
+    opts.find((o) => WEB_IMAGE.test(o.format || "")) ||
+    opts.find((o) => IIIF_IMAGE_URL.test(idOf(o) || "")) ||
+    opts[0]
+  );
+}
+
 function makePage(canvas, body) {
-  const service = describeService(body && body.service);
+  let service = describeService(body && body.service);
+  // No service listed, but the image URL is itself a IIIF Image API request:
+  // recover the service from it, so we can ask for small sizes.
+  const direct = idOf(body);
+  if (!service && direct && IIIF_IMAGE_URL.test(direct)) {
+    service = { id: direct.match(IIIF_IMAGE_URL)[1], version: 2, level: 1, width: null, height: null, sizes: null };
+  }
   return {
     label: labelText(canvas.label),
     width: canvas.width,
@@ -268,7 +294,7 @@ function pageFromV3Canvas(canvas) {
   const page = asArray(canvas.items)[0];
   const anno = page && asArray(page.items)[0];
   let body = asArray(anno && anno.body)[0];
-  if (body && body.type === "Choice") body = asArray(body.items)[0];
+  if (body && body.type === "Choice") body = pickChoice(body.items);
   return makePage(canvas, body);
 }
 
@@ -288,6 +314,33 @@ export function collectionMembers(json) {
   asArray(json.members).forEach(add);
   subCollections += asArray(json.collections).length;
   return { label: labelText(json.label), manifests: out, subCollections };
+}
+
+/**
+ * Some catalog records (multi-volume or multi-edition items, like many at LoC)
+ * resolve to a Collection rather than a Manifest. Follow it to its first
+ * manifest (through at most two levels of nesting).
+ *
+ * `fetchJson(url)` must resolve to { url, json }.
+ * Resolves to { url, json, part } where part is null for a plain manifest, or
+ * { collection, label, index, of } describing which part was picked.
+ */
+export async function followToManifest(first, fetchJson) {
+  let { url, json } = first;
+  let part = null;
+  for (let depth = 0; isCollection(json) && depth < 3; depth++) {
+    const { label, manifests } = collectionMembers(json);
+    const nested = asArray(json.items).concat(asArray(json.collections)).find((m) => /Collection/.test(m.type || m["@type"] || ""));
+    const next = manifests[0] || (nested && { id: idOf(nested), label: labelText(nested.label) });
+    if (!next || !next.id) {
+      const e = new Error("That collection doesn't list any items.");
+      e.name = "ManifestError";
+      throw e;
+    }
+    if (!part) part = { collection: label, label: next.label, index: 1, of: manifests.length || 1 };
+    ({ url, json } = await fetchJson(next.id));
+  }
+  return { url, json, part };
 }
 
 /** Flatten a v2 or v3 manifest into {label, pages[], rtl, attribution}. */

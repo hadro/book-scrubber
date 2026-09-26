@@ -7,6 +7,11 @@
 //     (the variance part of Hasler & Süsstrunk's colourfulness), so evenly
 //     yellowed paper doesn't count as colourful
 //   - dark: share of pixels well below the page's average brightness
+//   - picture: the largest connected region noticeably darker than the paper,
+//     and how much brightness varies inside it. Photographs and engravings
+//     make one big region full of light and shade (a sepia albumen print
+//     mounted on card has no strong colour or black, but plenty of tone);
+//     a block of text makes a region too, but an evenly grey one.
 // At this size lines of text blur into an even grey, while illustrations keep
 // big dark or coloured areas. The thresholds are heuristics, tuned on
 // synthetic pages; expect to adjust them after looking at real books.
@@ -15,11 +20,14 @@ const SIZE = 48;
 let ctx = null;
 
 export const THRESHOLDS = {
-  blankSpread: 7,
+  blankSpread: 5, // low on purpose: showing a near-blank page beats hiding faint text
   blankColour: 5,
   plateColour: 18,
   plateSpread: 45,
   plateDark: 0.22,
+  pictureArea: 0.08, // share of the page covered by one darker region...
+  pictureTone: 16, //  ...with at least this much brightness variation inside it
+  pictureDepth: 25, // how much darker than the paper counts as "darker"
 };
 
 /** Measure a loaded image. Returns null if the pixels can't be read (no CORS). */
@@ -67,8 +75,49 @@ export function classify(data) {
   const dark = darkCount / n;
 
   const t = THRESHOLDS;
+  const pic = pictureRegion(lum, t.pictureDepth);
   let kind = "text";
   if (spread < t.blankSpread && colour < t.blankColour) kind = "blank";
   else if (colour > t.plateColour || spread > t.plateSpread || dark > t.plateDark) kind = "plate";
-  return { kind, spread: Math.round(spread), colour: Math.round(colour), dark: Math.round(dark * 100) / 100 };
+  else if (pic.area >= t.pictureArea && pic.tone >= t.pictureTone) kind = "plate";
+  return {
+    kind,
+    spread: Math.round(spread),
+    colour: Math.round(colour),
+    dark: Math.round(dark * 100) / 100,
+    area: Math.round(pic.area * 100) / 100,
+    tone: Math.round(pic.tone),
+  };
+}
+
+/** Largest 4-connected region darker than the paper by `depth`, and the brightness spread inside it. */
+function pictureRegion(lum, depth) {
+  const n = lum.length;
+  const size = Math.round(Math.sqrt(n));
+  const paper = Float32Array.from(lum).sort()[Math.floor(n * 0.9)]; // the page's own light tone
+  const seen = new Uint8Array(n);
+  const inRegion = (i) => paper - lum[i] > depth;
+  let best = [];
+  for (let s = 0; s < n; s++) {
+    if (seen[s] || !inRegion(s)) continue;
+    const comp = [];
+    const stack = [s];
+    seen[s] = 1;
+    while (stack.length) {
+      const i = stack.pop();
+      comp.push(i);
+      const x = i % size;
+      for (const j of [x + 1 < size ? i + 1 : -1, x > 0 ? i - 1 : -1, i + size < n ? i + size : -1, i - size]) {
+        if (j >= 0 && !seen[j] && inRegion(j)) {
+          seen[j] = 1;
+          stack.push(j);
+        }
+      }
+    }
+    if (comp.length > best.length) best = comp;
+  }
+  if (!best.length) return { area: 0, tone: 0 };
+  const mean = best.reduce((a, i) => a + lum[i], 0) / best.length;
+  const tone = Math.sqrt(best.reduce((a, i) => a + (lum[i] - mean) ** 2, 0) / best.length);
+  return { area: best.length / n, tone };
 }

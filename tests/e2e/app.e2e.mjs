@@ -109,6 +109,26 @@ test("politeness: fly-bys cost nothing, brief hovers little, repeats nothing", a
   await ctx.close();
 });
 
+test("a deliberate hover finishes loading the card; a quick pass doesn't", async () => {
+  const { ctx, page } = await openApp({ shelf: ["typical", "plain"] });
+  const covers = page.locator(".card-cover");
+  await covers.first().scrollIntoViewIfNeeded();
+  const [a, b] = await Promise.all([covers.nth(0).boundingBox(), covers.nth(1).boundingBox()]);
+  // Quick pass over card 2 (≈300 ms): queued requests are dropped when the mouse leaves.
+  await page.mouse.move(b.x + 20, b.y + 100);
+  await sleep(300);
+  await page.mouse.move(2, 2);
+  // Deliberate look at card 1 (≈900 ms), then away.
+  await page.mouse.move(a.x + 20, a.y + 100);
+  await sleep(900);
+  await page.mouse.move(2, 2);
+  await sleep(6500);
+  const loaded = (i) => page.locator(".card").nth(i).locator(".ticks i.is-loaded").count();
+  assert.equal(await loaded(0), 24, "the deliberately hovered card finished loading");
+  assert.ok((await loaded(1)) < 12, `the quickly passed card stopped early (${await loaded(1)})`);
+  await ctx.close();
+});
+
 test("viewer: opens, steps, and drops queued requests when closed", async () => {
   const { ctx, page } = await openApp({ shelf: ["oz"] });
   await page.locator(".card-cover").first().click();
@@ -122,6 +142,61 @@ test("viewer: opens, steps, and drops queued requests when closed", async () => 
   assert.ok(iiif.stats().images <= 3, `only in-flight requests finish after close (got ${iiif.stats().images})`);
   // Focus goes back to the card that opened it.
   assert.equal(await page.evaluate(() => document.activeElement.classList.contains("card-cover")), true);
+  await ctx.close();
+});
+
+test("pages loaded in the viewer are reused by the shelf card", async () => {
+  const { ctx, page } = await openApp({ shelf: ["plain"] });
+  const ticksBefore = await page.locator(".card .ticks i").count();
+  await page.locator(".card-cover").first().click();
+  await page.waitForFunction(() => /p\. \d+ \/ 60/.test(document.querySelector("#stage-counter").textContent));
+  // Step through the book in the viewer, pausing a little on each page.
+  await page.focus("#play-btn");
+  for (let k = 0; k < 59; k++) {
+    await page.keyboard.press("ArrowRight");
+    await sleep(70);
+  }
+  await sleep(1500);
+  await page.mouse.move(2, 2);
+  await page.keyboard.press("Escape");
+  await sleep(200); // the dialog's close event fires asynchronously
+  const ticksAfter = await page.locator(".card .ticks i").count();
+  assert.ok(ticksAfter > ticksBefore, `card gained frames from the viewer (${ticksBefore} -> ${ticksAfter})`);
+
+  iiif.reset();
+  const sweep = Array.from({ length: 40 }, (_, k) => (k + 0.5) / 40);
+  const shown = new Set((await hover(page, 0, 1500, sweep)).map(pageOf));
+  assert.equal(iiif.stats().images, 0, "hovering the card afterwards costs nothing");
+  assert.ok(shown.size > 24, `scrubbing reaches more pages than the 24 sampled (${shown.size})`);
+  await ctx.close();
+});
+
+test("on a long book, every page the viewer loaded is reachable on the card", async () => {
+  const { ctx, page } = await openApp({ shelf: ["big"] });
+  await page.locator(".card-cover").first().click();
+  await page.waitForFunction(() => /p\. \d+ \/ 400/.test(document.querySelector("#stage-counter").textContent));
+  await page.focus("#play-btn");
+  for (let k = 0; k < 170; k++) {
+    await page.keyboard.press("ArrowRight");
+    await sleep(50);
+  }
+  await sleep(1500);
+  const loaded = new Set(Object.keys(iiif.stats().urls).filter((u) => u.includes("/big/")).map((u) => Number(u.match(/\/p(\d+)\//)[1])));
+  await page.mouse.move(2, 2);
+  await page.keyboard.press("Escape");
+  await sleep(300);
+  const cover = page.locator(".card-cover").first();
+  await cover.scrollIntoViewIfNeeded();
+  const box = await cover.boundingBox();
+  const shown = new Set();
+  await page.mouse.move(box.x + 1, box.y + 100);
+  await sleep(300);
+  for (let x = 0; x <= box.width; x += 0.5) {
+    await page.mouse.move(box.x + x, box.y + 100);
+    shown.add(pageOf(await cover.locator(".counter").textContent()));
+  }
+  const missing = [...loaded].filter((p) => !shown.has(p));
+  assert.deepEqual(missing, [], `pages loaded in the viewer but unreachable on the card (${loaded.size} loaded)`);
   await ctx.close();
 });
 
@@ -181,6 +256,9 @@ test("exports: GIF, contact sheet and (where supported) video, with credit line"
   const gif = await make("gif");
   assert.equal(String.fromCharCode(...gif.head), "GIF89a");
   assert.match(gif.name, /\.gif$/);
+  assert.equal(await page.isDisabled("#gif-delay"), false);
+  await page.selectOption("#gif-format", "sheet");
+  assert.equal(await page.isDisabled("#gif-delay"), true, "speed is greyed out for contact sheets");
   const sheet = await make("sheet");
   assert.deepEqual(sheet.head.slice(0, 2), [0xff, 0xd8], "contact sheet is a JPEG");
   if (await page.locator('#gif-format option[value="video"]').count()) {
@@ -209,6 +287,29 @@ test("blank pages are skipped; plates-only keeps just the pictures", async () =>
   await page.waitForSelector("#gif-result:not([hidden])", { timeout: 30000 });
   const used = (await page.getAttribute("#gif-result", "data-sources")).split(" ").map((u) => Number(u.match(/\/p(\d+)\//)[1]));
   assert.ok(used.every((p) => iiif.kindOfPage(p) === "plate"), `export used plates only: ${used}`);
+  await ctx.close();
+});
+
+test("a shelf entry that resolves to a collection shows its first part", async () => {
+  const { ctx, page } = await openApp({ shelf: [`${iiif.origin}/c/shelf.json`] });
+  await page.waitForFunction(() => /1 of 3/.test(document.querySelector(".card-note").textContent));
+  assert.equal(await page.textContent(".card-title"), "A small collection");
+  assert.match(await page.textContent(".card-note"), /Book plain \(1 of 3\) · 60 pages/);
+  await page.locator(".card-cover").first().click();
+  await page.waitForFunction(() => /part 1 of 3/.test(document.querySelector("#viewer-meta").textContent));
+  await ctx.close();
+});
+
+test("plates-only and flash mode start off again after a reload", async () => {
+  const { ctx, page } = await openApp({ shelf: ["mixed"] });
+  await page.check("#plates-toggle", { force: true });
+  await page.check("#flash-toggle", { force: true });
+  await page.reload();
+  await page.waitForSelector(".card .card-img.is-ready");
+  assert.equal(await page.isChecked("#plates-toggle"), false);
+  assert.equal(await page.isChecked("#flash-toggle"), false);
+  const counters = await hover(page, 0, 2500, Array.from({ length: 24 }, (_, k) => (k + 0.5) / 24));
+  assert.ok(counters.map(pageOf).some((p) => iiif.kindOfPage(p) === "text"), "text pages are back after reload");
   await ctx.close();
 });
 

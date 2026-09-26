@@ -12,6 +12,7 @@ export const SOURCES = {
   ecod: { name: "e-codices", short: "e-cod", color: "var(--c-ecod)" },
   nga: { name: "National Gallery of Art Library", short: "NGA", color: "var(--c-nga)" },
   getty: { name: "Getty Museum", short: "Getty", color: "var(--c-getty)" },
+  yale: { name: "Yale University Library", short: "Yale", color: "var(--c-yale)" },
   mine: { name: "Your pick", short: "yours", color: "var(--c-mine)" },
 };
 
@@ -22,18 +23,34 @@ export const EXAMPLES = [
     note: "Haeckel, 1904",
     input: "https://archive.org/details/kunstformenderna00haec",
   },
+  // {
+  //   source: "loc",
+  //   title: "The Wonderful Wizard of Oz",
+  //   note: "Baum & Denslow, 1900",
+  //   input: "https://www.loc.gov/item/03032405/",
+  // },
   {
+    // Title comes from the manifest.
     source: "loc",
-    title: "The Wonderful Wizard of Oz",
-    note: "Baum & Denslow, 1900",
-    input: "https://www.loc.gov/item/03032405/",
+    note: "Library of Congress",
+    input: "https://www.loc.gov/item/73644404/",
   },
   {
-    source: "nypl",
-    title: "The Negro Motorist Green-Book",
-    note: "1940 edition",
-    input: "https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928",
+    // The Florentine Codex via the Library of Congress (formerly World Digital
+    // Library). The Getty's Digital Florentine Codex site has no public
+    // manifests; the whole codex is loc.gov/item/2021667837/, and each of its
+    // twelve Books also has its own record.
+    source: "loc",
+    title: "Florentine Codex, Book XII: The Conquest of Mexico",
+    note: "Sahagún, 1577",
+    input: "https://www.loc.gov/item/2021667857/",
   },
+  //{
+  //  source: "nypl",
+  //  title: "The Negro Motorist Green-Book",
+  //  note: "1940 edition",
+  //  input: "https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928",
+  //},
   {
     source: "nypl",
     title: "Shiohi no tsuto (Gifts of the Ebb Tide)",
@@ -67,30 +84,42 @@ export const EXAMPLES = [
     input: "https://archive.org/details/b33498854",
   },
   {
-    // Title comes from the manifest.
     source: "nga",
-    note: "National Gallery of Art Library",
+    title: "An Essay on Light and Shade, on Colours",
+    note: "Mary Gartside, 1805",
     input:
       "https://library.nga.gov/discovery/fulldisplay?context=L&vid=01NGA_INST:NGA&search_scope=MainLibrary&tab=MainLibrary&lang=en&docid=alma99826713504896",
   },
+ // {
+ //   source: "getty",
+ //   title: "Japanese Album",
+ //   note: "Kusakabe Kimbei, 1870s–1890s",
+ //   input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
+ //   page: "https://www.getty.edu/art/collection/object/104GAQ",
+ // },
   {
     source: "getty",
-    title: "Japanese Album",
-    note: "Kusakabe Kimbei, 1870s–1890s",
-    input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
-    page: "https://www.getty.edu/art/collection/object/104GAQ",
-  },
-  {
-    // Title comes from the manifest.
-    source: "getty",
-    note: "Getty Museum album",
+    title: "Egypt and Palestine",
+    note: "Francis Frith, 1858–60",
     input: "https://media.getty.edu/iiif/manifest/3/01b5ac79-78d9-4900-a51b-5ba13c19b6de",
   },
+  //{
+  //  source: "ia",
+  //  title: "Alice's Adventures in Wonderland",
+  //  note: "Carroll & Tenniel",
+  //  input: "https://archive.org/details/carroll-lewis-alices-adventures-in-wonderland-illustrated-by-tenniel-john.-v-1.0",
+  //},
   {
-    source: "ia",
-    title: "Alice's Adventures in Wonderland",
-    note: "Carroll & Tenniel",
-    input: "https://archive.org/details/carroll-lewis-alices-adventures-in-wonderland-illustrated-by-tenniel-john.-v-1.0",
+    source: "getty",
+    title: "The Keramic Gallery",
+    note: "600 illustrations of pottery & porcelain",
+    input: "https://media.getty.edu/iiif/manifest/3/d4ce5921-731f-4347-945a-bafd815da340",
+  },
+  {
+    source: "yale",
+    title: "Voynich manuscript",
+    note: "Beinecke MS 408 · 15th century",
+    input: "https://collections.library.yale.edu/manifests/2002046",
   },
   {
     source: "ecod",
@@ -111,6 +140,7 @@ export function guessSource(url) {
     if (host.endsWith("e-codices.unifr.ch")) return "ecod";
     if (host.endsWith("nga.gov")) return "nga";
     if (host.endsWith("getty.edu")) return "getty";
+    if (host.endsWith("yale.edu")) return "yale";
   } catch {}
   return "mine";
 }
