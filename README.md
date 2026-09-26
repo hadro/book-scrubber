@@ -103,6 +103,7 @@ Each resized page costs a IIIF server a decode of its master file, so the app ke
   - Manifests are kept in the browser (IndexedDB) for a week. If a refresh fails, the old copy is used.
   - A service worker (`sw.js`) keeps page images from CORS-enabled servers for 30 days, capped at 1,500, even when a server's own cache headers are short.
   - Small GIFs reuse images that are already loaded.
+  - Shelf cards reuse whatever the viewer loaded. A card frame shows its page from any size already loaded (baked, 300px or 800px). After you close the viewer, every page it loaded becomes an extra frame on that book's card, up to 150, so scrubbing gets finer without new downloads.
 - **Stops when nobody's watching.** Playback, flash mode and the request queue pause while the tab is hidden. Browsers set to save data get 12 pages per scrub by default.
 - **Baked shelf.** See above.
 

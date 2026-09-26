@@ -125,6 +125,32 @@ test("viewer: opens, steps, and drops queued requests when closed", async () => 
   await ctx.close();
 });
 
+test("pages loaded in the viewer are reused by the shelf card", async () => {
+  const { ctx, page } = await openApp({ shelf: ["plain"] });
+  const ticksBefore = await page.locator(".card .ticks i").count();
+  await page.locator(".card-cover").first().click();
+  await page.waitForFunction(() => /p\. \d+ \/ 60/.test(document.querySelector("#stage-counter").textContent));
+  // Step through the book in the viewer, pausing a little on each page.
+  await page.focus("#play-btn");
+  for (let k = 0; k < 59; k++) {
+    await page.keyboard.press("ArrowRight");
+    await sleep(70);
+  }
+  await sleep(1500);
+  await page.mouse.move(2, 2);
+  await page.keyboard.press("Escape");
+  await sleep(200); // the dialog's close event fires asynchronously
+  const ticksAfter = await page.locator(".card .ticks i").count();
+  assert.ok(ticksAfter > ticksBefore, `card gained frames from the viewer (${ticksBefore} -> ${ticksAfter})`);
+
+  iiif.reset();
+  const sweep = Array.from({ length: 40 }, (_, k) => (k + 0.5) / 40);
+  const shown = new Set((await hover(page, 0, 1500, sweep)).map(pageOf));
+  assert.equal(iiif.stats().images, 0, "hovering the card afterwards costs nothing");
+  assert.ok(shown.size > 24, `scrubbing reaches more pages than the 24 sampled (${shown.size})`);
+  await ctx.close();
+});
+
 test("manifests are remembered across reloads", async () => {
   const { ctx, page } = await openApp({ shelf: ["plain", "oz"] });
   const first = iiif.stats().manifests;
