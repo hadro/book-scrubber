@@ -1,13 +1,13 @@
-# Book Scrubber
+# Flipbook
 
-Hover over a digitized book and wiggle your mouse to flip through its pages. Click one to open a flipbook with play controls, and to turn it into an animated GIF, a short video or a contact sheet.
+Hover over a digitized book and wiggle your mouse to flip through its pages. Click one to open it with play controls, and to turn it into an animated GIF, a short video or a contact sheet.
 
 It's a small homage to the animated book thumbnails that used to flicker through Internet Archive search results about ten years ago. It works with **any IIIF manifest**, so books from almost any library can go on the shelf.
 
 ## Features
 
 - **Links to the source.** Every card links to its IIIF manifest and, when known, the item's page at its institution. The item page comes from, in order: a `page` set in `js/examples.js`, the manifest's `homepage` (v3) or `related` (v2), or the URL itself for IA, LoC, NYPL, e-codices, NGA and Yale. The viewer shows the same links.
-- **Hover-scrubber cards.** Mouse position maps to a page. Pages load "coarse first" (ends, then middle, then quarters, and so on), so you can scrub the whole book almost at once. On phones, drag a finger sideways across a card.
+- **Hover-to-flip cards.** Mouse position maps to a page. Pages load "coarse first" (ends, then middle, then quarters, and so on), so you can scrub the whole book almost at once. On phones, drag a finger sideways across a card.
 - **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (at 48×48 px: brightness spread, colour, dark areas, and the largest darker region with varied tones inside, which catches sepia photographs and engravings) and labelled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations; it starts off on every visit, and cards show "· plates" while it's filtering. Books with fewer than 3 detected plates show all non-blank pages instead. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
 - **Paste your own, or drag it in.** Accepts a IIIF Presentation v2 or v3 manifest or **collection** (its first 36 books go on the shelf), or a page URL from:
   - `archive.org/details/…`, or a bare IA identifier
@@ -24,7 +24,7 @@ It's a small homage to the animated book thumbnails that used to flicker through
   BHL doesn't publish IIIF manifests at a predictable address. Paste the book's archive.org link instead; BHL hosts its scans there.
 
   Pasted books stay on your shelf in `localStorage`.
-- **Flipbook viewer.** Scrubbing, play/pause, speed control, boomerang mode and keyboard controls. Share links open the book at the page you're on (`#m=…&p=42`). The viewer also links to the item page and the manifest.
+- **Viewer.** Scrubbing, play/pause, speed control, boomerang mode and keyboard controls. Share links open the book at the page you're on (`#m=…&p=42`). The viewer also links to the item page and the manifest.
 - **Exports.** GIF, video (WebM or MP4, whichever the browser can record) or a contact-sheet JPEG. Choose frames, width, speed and pages (no blanks, plates only, or all). A credit line with the title and institution is added by default. GIFs are encoded in the browser with [gifenc](https://github.com/mattdesl/gifenc), vendored in `vendor/`.
 - **Flash mode.** Every card cycles its pages at once, like the old IA search results.
 - Right-to-left books scrub in the right direction. Light and dark themes follow the OS setting.
@@ -62,7 +62,7 @@ The link-preview metadata in `index.html` assumes the site lives at `https://had
 
 ```yaml
 ---
-title: Book Scrubber
+title: Flipbook
 emoji: 📚
 colorFrom: pink
 colorTo: yellow
@@ -130,15 +130,15 @@ Measured against a fake IIIF server (with cache headers) in headless Chrome:
 
 ## For IIIF server administrators
 
-Book Scrubber is a static web page. Everything runs in visitors' browsers, so requests come from their IP addresses, carrying this site's address in the `Referer` header. What it asks your server for:
+Flipbook is a static web page. Everything runs in visitors' browsers, so requests come from their IP addresses, carrying this site's address in the `Referer` header. What it asks your server for:
 
 - The manifest, once per book per visitor per week.
-- Page images at 300px wide (shelf thumbnails and viewer overview), and at 800px for the page a viewer pauses on. A ready-made `thumbnail` or advertised `sizes` in your manifest are used instead when they're close to those widths. The quickest way to cut Book Scrubber's cost to your server is to publish either one.
+- Page images at 300px wide (shelf thumbnails and viewer overview), and at 800px for the page a viewer pauses on. A ready-made `thumbnail` or advertised `sizes` in your manifest are used instead when they're close to those widths. The quickest way to cut Flipbook's cost to your server is to publish either one.
 - At most 3 requests at a time from any one browser, fewer if you're slow, pausing if you return errors. Nothing is requested for books a visitor isn't looking at.
 
-The example shelf's thumbnails are downloaded once, by the "Bake example shelf" GitHub Action (User-Agent `book-scrubber example baker`), and served from this repository.
+The example shelf's thumbnails are downloaded once, by the "Bake example shelf" GitHub Action (User-Agent `flipbook example baker`), and served from this repository.
 
-If Book Scrubber is causing you trouble, or you'd rather your collection not appear on the example shelf, please [open an issue](https://github.com/hadro/book-scrubber/issues) and it will be dealt with promptly.
+If Flipbook is causing you trouble, or you'd rather your collection not appear on the example shelf, please [open an issue](https://github.com/hadro/book-scrubber/issues) and it will be dealt with promptly.
 
 ## Analytics
 
@@ -161,8 +161,8 @@ Page views record the page path only. Share links keep the book in the `#m=…` 
 
 ## Known limits
 
-- **GIFs need CORS.** The scrubber works with any IIIF server. Making a GIF means drawing the images onto a canvas, which works only when the image server sends `Access-Control-Allow-Origin`. When it doesn't, the viewer says so, and scrubbing still works. The fix would be a small proxy, for example a Hugging Face Space with a Python backend.
+- **GIFs need CORS.** Scrubbing works with any IIIF server. Making a GIF means drawing the images onto a canvas, which works only when the image server sends `Access-Control-Allow-Origin`. When it doesn't, the viewer says so, and scrubbing still works. The fix would be a small proxy, for example a Hugging Face Space with a Python backend.
 - **Level-0 image servers**, which serve only pre-made sizes, are handled when the manifest lists `sizes`. Otherwise the app falls back to the full image.
 - **Collections** are read one level deep. Nested sub-collections aren't opened, so paste one of those directly.
 - **Page detection is heuristic.** Unusual scans (dark backgrounds, colour charts, heavy bleed-through) can be misjudged. When a book has no detected plates, "plates only" falls back to all non-blank pages.
-- **Link previews are site-wide.** Crawlers don't run JavaScript, so a shared book link previews as Book Scrubber, not as the book itself. Per-book previews would need a server.
+- **Link previews are site-wide.** Crawlers don't run JavaScript, so a shared book link previews as Flipbook, not as the book itself. Per-book previews would need a server.

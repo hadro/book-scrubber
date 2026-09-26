@@ -33,7 +33,7 @@ async function openApp({ shelf = [], hash = "", origin = app.origin, context = {
   await ctx.addInitScript((inputs) => {
     if (!sessionStorage.getItem("seeded")) {
       sessionStorage.setItem("seeded", "1");
-      localStorage.setItem("book-scrubber:shelf", JSON.stringify(inputs));
+      localStorage.setItem("flipbook:shelf", JSON.stringify(inputs));
     }
   }, shelf.map((b) => (b.startsWith("http") ? b : iiif.manifest(b))));
   const page = await ctx.newPage();
@@ -310,6 +310,16 @@ test("plates-only and flash mode start off again after a reload", async () => {
   assert.equal(await page.isChecked("#flash-toggle"), false);
   const counters = await hover(page, 0, 2500, Array.from({ length: 24 }, (_, k) => (k + 0.5) / 24));
   assert.ok(counters.map(pageOf).some((p) => iiif.kindOfPage(p) === "text"), "text pages are back after reload");
+  await ctx.close();
+});
+
+test("a shelf saved before the rename (book-scrubber:shelf) still loads", async () => {
+  const ctx = await browser.newContext({ serviceWorkers: "block" });
+  await ctx.addInitScript((url) => localStorage.setItem("book-scrubber:shelf", JSON.stringify([url])), iiif.manifest("plain"));
+  const page = await ctx.newPage();
+  await page.goto(`${app.origin}/?examples=0`);
+  await page.waitForSelector(".card .card-img.is-ready");
+  assert.equal(await page.textContent(".card-title"), "Book plain");
   await ctx.close();
 });
 

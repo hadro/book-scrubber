@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { EXAMPLES } from "../js/examples.js";
 import { resolveInput, followToManifest, parseManifest, pageImageUrl, SMALL } from "../js/iiif.js";
 
-const USER_AGENT = "book-scrubber example health check (https://github.com/hadro/book-scrubber)";
+const USER_AGENT = "flipbook example health check (https://github.com/hadro/book-scrubber)";
 const SITE_ORIGIN = "https://hadro.github.io";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

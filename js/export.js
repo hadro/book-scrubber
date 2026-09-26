@@ -6,7 +6,7 @@ import { GIFEncoder, quantize, applyPalette } from "../vendor/gifenc.esm.js";
 
 export function corsError() {
   const e = new Error(
-    "This library's image server doesn't let other websites re-use its images (no CORS headers), so this can't be made in the browser for this item. The scrubber still works!"
+    "This library's image server doesn't let other websites re-use its images (no CORS headers), so this can't be made in the browser for this item. Scrubbing still works!"
   );
   e.name = "CorsError";
   return e;

@@ -2,12 +2,16 @@
 // re-download them. Every call fails soft: private windows, blocked storage and
 // old browsers just behave as if nothing is cached.
 
-const DB_NAME = "book-scrubber";
+const DB_NAME = "flipbook";
 const STORE = "manifests";
 let dbPromise = null;
 
 function open() {
   if (!dbPromise) {
+    // Tidy up the cache left by the app's old name (Book Scrubber).
+    try {
+      indexedDB.deleteDatabase("book-scrubber");
+    } catch {}
     dbPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE);
