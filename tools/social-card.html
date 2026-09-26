@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- Source for social-card.png and apple-touch-icon.png. Rendered by scripts/make-social-card.mjs. -->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Bricolage"; font-weight: 800; src: url("../node_modules/@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-800-normal.woff2"); }
+  @font-face { font-family: "Bricolage"; font-weight: 700; src: url("../node_modules/@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-700-normal.woff2"); }
+  @font-face { font-family: "SpaceMono"; font-weight: 700; src: url("../node_modules/@fontsource/space-mono/files/space-mono-latin-700-normal.woff2"); }
+  :root { --paper: #f6efe2; --ink: #16130f; --pink: #ff48b0; --yellow: #ffe14d; --blue: #0078bf; --green: #00a95c; --orange: #ff6c2f; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #000; }
+  .card {
+    position: relative; width: 1200px; height: 630px; overflow: hidden;
+    background-color: var(--paper);
+    background-image: radial-gradient(rgba(22,19,15,.10) 1.6px, transparent 1.8px);
+    background-size: 22px 22px;
+    font-family: "Bricolage", sans-serif; color: var(--ink);
+  }
+  .kicker {
+    position: absolute; left: 70px; top: 70px;
+    font: 700 18px "SpaceMono", monospace; letter-spacing: .06em; text-transform: uppercase;
+    padding: 6px 14px; border: 3px solid var(--ink); border-radius: 999px; background: #fffaf0; transform: rotate(-2deg);
+  }
+  h1 { position: absolute; left: 62px; top: 132px; font-size: 128px; line-height: .84; font-weight: 800; letter-spacing: -.045em; }
+  h1 span { display: block; -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; text-shadow: 8px 8px 0 var(--ink); }
+  h1 .a { color: var(--pink); transform: rotate(-2deg); }
+  h1 .b { color: var(--yellow); transform: rotate(1.5deg) translateY(6px); }
+  .tag { position: absolute; left: 72px; top: 420px; width: 600px; font-size: 29px; font-weight: 700; line-height: 1.25; }
+  .tag small { display: block; margin-top: 16px; font: 700 15px "SpaceMono", monospace; color: #5b5347; white-space: nowrap; }
+
+  .book {
+    position: absolute; width: 220px; height: 294px;
+    background: #fffaf0; border: 4px solid var(--ink); border-radius: 12px; box-shadow: 10px 10px 0 var(--ink); overflow: hidden;
+  }
+  .book .page { position: absolute; inset: 12px 12px 30px; background: #efe4cf; }
+  .ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 18px; background: var(--ink); display: flex; gap: 2px; padding: 4px 5px; }
+  .ticks i { flex: 1; background: #8d8272; border-radius: 1px; }
+  .ticks i.on { background: var(--c, var(--pink)); }
+  .sticker {
+    position: absolute; top: 12px; left: 12px; z-index: 2; padding: 3px 9px; font: 700 14px "SpaceMono", monospace;
+    border: 2px solid var(--ink); border-radius: 6px; background: var(--c); box-shadow: 2px 2px 0 var(--ink); transform: rotate(-4deg);
+  }
+  .counter { position: absolute; top: 12px; right: 12px; z-index: 2; padding: 2px 8px; font: 700 12px "SpaceMono", monospace; color: #fffaf0; background: var(--ink); border-radius: 999px; }
+  .b1 { left: 715px; top: 170px; transform: rotate(-9deg); --c: var(--green); }
+  .b2 { left: 835px; top: 120px; transform: rotate(3deg); --c: var(--blue); }
+  .b3 { left: 940px; top: 210px; transform: rotate(11deg); --c: var(--orange); }
+  .cursor { position: absolute; left: 1030px; top: 455px; width: 54px; transform: rotate(-12deg); }
+  .arrows { position: absolute; left: 860px; top: 520px; font: 800 44px "Bricolage"; letter-spacing: 6px; }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <p class="kicker">Hover · scrub · flip</p>
+    <h1><span class="a">Book</span><span class="b">Scrubber</span></h1>
+    <p class="tag">Flip through centuries of digitized books. Paste any IIIF manifest. Make GIFs.
+      <small>Internet Archive · LoC · NYPL · BHL · Getty · NGA · e-codices</small></p>
+
+    <!-- Three book cards with abstract "pages": a botanical plate, a text page, a shell plate. -->
+    <div class="book b1">
+      <span class="sticker">BHL</span><span class="counter">p. 88 / 412</span>
+      <div class="page">
+        <svg viewBox="0 0 100 130" width="100%" height="100%">
+          <path d="M50 118 C48 90 52 60 50 30" stroke="#2f6b3a" stroke-width="2.5" fill="none"/>
+          <path d="M50 80 C30 72 22 58 26 48 C38 52 48 64 50 80Z" fill="#00a95c" stroke="#16130f" stroke-width="1.2"/>
+          <path d="M50 64 C70 56 78 42 74 32 C62 36 52 48 50 64Z" fill="#00a95c" stroke="#16130f" stroke-width="1.2"/>
+          <circle cx="50" cy="26" r="13" fill="#ff48b0" stroke="#16130f" stroke-width="1.5"/>
+          <circle cx="50" cy="26" r="5" fill="#ffe14d" stroke="#16130f" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="ticks"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="book b2">
+      <span class="sticker">IA</span><span class="counter">p. 41 / 96</span>
+      <div class="page">
+        <svg viewBox="0 0 100 130" width="100%" height="100%">
+          <rect x="14" y="14" width="46" height="7" fill="#16130f"/>
+          <g fill="#9b907e">
+            <rect x="14" y="30" width="72" height="3"/><rect x="14" y="37" width="70" height="3"/><rect x="14" y="44" width="72" height="3"/>
+            <rect x="14" y="51" width="64" height="3"/><rect x="14" y="58" width="72" height="3"/><rect x="14" y="65" width="68" height="3"/>
+          </g>
+          <rect x="22" y="76" width="56" height="40" fill="#0078bf" stroke="#16130f" stroke-width="1.5"/>
+          <circle cx="40" cy="92" r="8" fill="#ffe14d"/>
+          <path d="M22 116 L42 98 L56 108 L66 100 L78 116Z" fill="#16130f"/>
+        </svg>
+      </div>
+      <div class="ticks"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="book b3">
+      <span class="sticker">NYPL</span><span class="counter">p. 12 / 40</span>
+      <div class="page">
+        <svg viewBox="0 0 100 130" width="100%" height="100%">
+          <path d="M50 30 C74 30 84 56 78 78 C72 98 58 104 50 104 C42 104 28 98 22 78 C16 56 26 30 50 30Z" fill="#ff6c2f" stroke="#16130f" stroke-width="1.5"/>
+          <g stroke="#16130f" stroke-width="1.2" fill="none">
+            <path d="M50 34 L50 102"/><path d="M40 36 C36 60 38 86 44 102"/><path d="M60 36 C64 60 62 86 56 102"/>
+            <path d="M30 44 C24 66 28 88 36 100"/><path d="M70 44 C76 66 72 88 64 100"/>
+          </g>
+        </svg>
+      </div>
+      <div class="ticks"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+    </div>
+    <svg class="cursor" viewBox="0 0 24 30"><path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 16 L20 16 Z" fill="#fffaf0" stroke="#16130f" stroke-width="2" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- 180×180 home-screen icon -->
+  <div id="icon" style="width:180px;height:180px;background:#ff48b0;display:flex;align-items:center;justify-content:center;margin-top:20px">
+    <svg viewBox="0 0 32 32" width="130" height="130"><rect x="5" y="3" width="22" height="26" rx="2" fill="#fffaf0" stroke="#16130f" stroke-width="2.5"/><path d="M10 9h12M10 14h12M10 19h8" stroke="#16130f" stroke-width="2.5" stroke-linecap="round"/></svg>
+  </div>
+</body>
+</html>

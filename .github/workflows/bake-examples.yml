@@ -1,0 +1,44 @@
+name: Bake example shelf
+
+# Run from the Actions tab ("Run workflow") after changing js/examples.js.
+# Downloads each example's sampled thumbnails once and commits them to baked/.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-bake examples that are already baked"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write # to start the Pages deploy after baking on main
+
+jobs:
+  bake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: node scripts/bake-examples.mjs ${{ inputs.force && '--force' || '' }}
+      - name: Commit baked files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add baked
+          if git diff --cached --quiet; then
+            echo "Nothing new to commit."
+          else
+            git commit -m "Bake example shelf thumbnails"
+            git push
+            # Pushes made with GITHUB_TOKEN don't trigger other workflows, so
+            # redeploy the site explicitly when baking on main.
+            if [ "${{ github.ref_name }}" = "main" ]; then
+              gh workflow run pages.yml --ref main
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

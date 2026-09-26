@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book Scrubber</title>
+  <meta name="description" content="Hover over digitized books to flip through their pages. Paste any IIIF manifest or collection. Make GIFs, videos and contact sheets.">
+  <!-- Link previews. SITE_URL assumes GitHub Pages at hadro.github.io/book-scrubber; change these if it moves. -->
+  <link rel="canonical" href="https://hadro.github.io/book-scrubber/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Book Scrubber">
+  <meta property="og:title" content="Book Scrubber">
+  <meta property="og:description" content="Flip through centuries of digitized books by wiggling your mouse. Paste any IIIF manifest. Make GIFs.">
+  <meta property="og:url" content="https://hadro.github.io/book-scrubber/">
+  <meta property="og:image" content="https://hadro.github.io/book-scrubber/img/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Book Scrubber: three tilted book cards showing a flower, a text page and a shell, with a mouse cursor scrubbing across them.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Book Scrubber">
+  <meta name="twitter:description" content="Flip through centuries of digitized books by wiggling your mouse. Paste any IIIF manifest. Make GIFs.">
+  <meta name="twitter:image" content="https://hadro.github.io/book-scrubber/img/social-card.png">
+  <meta name="twitter:image:alt" content="Book Scrubber: three tilted book cards being scrubbed with a mouse cursor.">
+  <meta name="theme-color" content="#f6efe2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1b1813" media="(prefers-color-scheme: dark)">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='3' width='22' height='26' rx='2' fill='%23ff48b0' stroke='%23111' stroke-width='2.5'/%3E%3Cpath d='M10 9h12M10 14h12M10 19h8' stroke='%23111' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <p class="kicker">Est. circa 2012 · re-shelved for the IIIF era</p>
+      <h1 class="title" aria-label="Book Scrubber">
+        <span class="title-word">Book</span>
+        <span class="title-word title-word--alt">Scrubber</span>
+      </h1>
+      <p class="tagline"><span class="only-hover">Hover over a book and wiggle your mouse</span><span class="only-touch">Drag a finger sideways across a book</span> to flip through centuries of pages. <span class="only-hover">Click</span><span class="only-touch">Tap</span> one to open the flipbook and make a GIF.</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="paste" aria-labelledby="paste-label">
+      <form id="paste-form" class="paste-form" autocomplete="off">
+        <label id="paste-label" for="paste-input" class="paste-label">Shelve your own book <small>(or drag a IIIF logo onto the page)</small></label>
+        <div class="paste-row">
+          <input id="paste-input" class="paste-input" type="text" inputmode="url" spellcheck="false"
+                 placeholder="Paste a IIIF manifest, or an archive.org / loc.gov / NYPL / BHL link…">
+          <button type="submit" class="btn btn--pink">Shelve it!</button>
+        </div>
+        <p class="paste-hint">Works with any IIIF Presentation v2 or v3 manifest or collection. It also understands
+          <code>archive.org/details/…</code>, <code>loc.gov/item/…</code>,
+          <code>digitalcollections.nypl.org/items/…</code>, <code>library.nga.gov</code> records,
+          links from IIIF viewers, or a bare Internet Archive identifier.</p>
+        <p id="paste-status" class="paste-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="shelf-controls" aria-label="Shelf options">
+      <label class="toggle">
+        <input type="checkbox" id="flash-toggle">
+        <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+        <span class="toggle-text">Flash mode <small>(the 2014 annoyance, lovingly restored)</small></span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="plates-toggle">
+        <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+        <span class="toggle-text">Plates only <small>(skip the text, keep the pictures)</small></span>
+      </label>
+      <label class="select">
+        <span>Pages per scrub</span>
+        <select id="density">
+          <option value="12">12</option>
+          <option value="24" selected>24</option>
+          <option value="48">48</option>
+        </select>
+      </label>
+    </section>
+
+    <section id="shelf" class="shelf" aria-label="Books"></section>
+  </main>
+
+  <footer class="footer">
+    <p>Images are loaded directly from each library's IIIF servers.
+      Rights and attribution belong to the holding institutions; see each item's source link.</p>
+    <p>Inspired by the animated book thumbnails that used to flicker through Internet Archive search results.</p>
+    <p>Run a IIIF image server? <a href="https://github.com/hadro/book-scrubber#for-iiif-server-administrators">Here's how Book Scrubber treats it, and how to reach us.</a></p>
+  </footer>
+
+  <div id="drop-overlay" class="drop-overlay" hidden aria-hidden="true">
+    <p>Drop it on the shelf!<small>IIIF logos, manifest links and viewer links all work</small></p>
+  </div>
+
+  <dialog id="viewer" class="viewer" aria-labelledby="viewer-title">
+    <div class="viewer-inner">
+      <button class="viewer-close btn btn--icon" type="button" data-close aria-label="Close">✕</button>
+
+      <div class="stage">
+        <div class="stage-frame">
+          <img id="stage-img" class="stage-img" alt="">
+          <div id="stage-loading" class="flipper" aria-hidden="true"><span></span><span></span><span></span></div>
+          <span id="stage-counter" class="counter counter--big">–</span>
+        </div>
+        <input id="stage-range" class="range" type="range" min="0" max="0" value="0" step="1" aria-label="Scrub through pages">
+        <div class="stage-buttons">
+          <button id="play-btn" class="btn btn--yellow" type="button">▶ Play</button>
+          <label class="inline-field">
+            <span>Speed</span>
+            <input id="speed" type="range" min="1" max="24" value="8" aria-label="Frames per second">
+            <output id="speed-out">8 fps</output>
+          </label>
+          <label class="toggle toggle--small">
+            <input type="checkbox" id="bounce-toggle">
+            <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+            <span class="toggle-text">Boomerang</span>
+          </label>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <span id="viewer-sticker" class="sticker">IA</span>
+        <h2 id="viewer-title" class="viewer-title">…</h2>
+        <p id="viewer-meta" class="viewer-meta"></p>
+        <p class="viewer-links">
+          <a id="viewer-home" target="_blank" rel="noopener" hidden>Item page ↗</a>
+          <a id="viewer-manifest" target="_blank" rel="noopener">IIIF manifest ↗</a>
+          <button id="share-btn" class="linklike" type="button">Copy share link</button>
+        </p>
+
+        <div class="gif-box">
+          <h3>Make something</h3>
+          <div class="gif-fields">
+            <label>Format
+              <select id="gif-format">
+                <option value="gif" selected>GIF</option>
+                <option value="video">Video</option>
+                <option value="sheet">Contact sheet</option>
+              </select>
+            </label>
+            <label>Pages
+              <select id="gif-pages">
+                <option value="nonblank" selected>No blanks</option>
+                <option value="plates">Plates</option>
+                <option value="all">All</option>
+              </select>
+            </label>
+            <label>Frames
+              <select id="gif-frames">
+                <option>8</option><option selected>16</option><option>24</option><option>32</option><option>48</option>
+              </select>
+            </label>
+            <label>Width
+              <select id="gif-width">
+                <option value="200">200px</option><option value="300" selected>300px</option><option value="480">480px</option>
+              </select>
+            </label>
+            <label>Speed
+              <select id="gif-delay">
+                <option value="500">Leisurely</option><option value="250" selected>Brisk</option><option value="120">Frantic</option>
+              </select>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="gif-credit" checked>
+              <span>Credit line</span>
+            </label>
+          </div>
+          <button id="gif-btn" class="btn btn--pink btn--wide" type="button">Make GIF</button>
+          <div id="gif-progress" class="progress" hidden><div class="progress-bar"></div><span class="progress-text"></span></div>
+          <p id="gif-error" class="gif-error" role="alert"></p>
+          <figure id="gif-result" class="gif-result" hidden>
+            <img id="gif-img" alt="Preview of the file you made">
+            <video id="gif-video" muted loop playsinline autoplay hidden></video>
+            <figcaption>
+              <a id="gif-download" class="btn btn--green" download="book-scrubber.gif">Download</a>
+              <span id="gif-size" class="gif-size"></span>
+            </figcaption>
+          </figure>
+        </div>
+        <p class="keys">Keys: <kbd>←</kbd> <kbd>→</kbd> step · <kbd>Space</kbd> play · <kbd>Esc</kbd> close</p>
+      </aside>
+    </div>
+  </dialog>
+
+  <p id="card-hint" class="visually-hidden">Use the left and right arrow keys to flip through pages. Press Enter to open the flipbook.</p>
+
+  <template id="card-template">
+    <article class="card">
+      <button class="card-cover" type="button" aria-describedby="card-hint">
+        <span class="sticker"></span>
+        <img class="card-img" alt="" draggable="false">
+        <span class="flipper" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="counter"></span>
+        <span class="card-error" hidden></span>
+        <span class="ticks" aria-hidden="true"></span>
+      </button>
+      <div class="card-caption">
+        <h3 class="card-title"></h3>
+        <p class="card-note"></p>
+        <p class="card-links">
+          <a class="card-link-page" target="_blank" rel="noopener" hidden>Item page ↗</a>
+          <a class="card-link-iiif" target="_blank" rel="noopener" title="IIIF manifest">IIIF ↗</a>
+        </p>
+      </div>
+      <button class="card-remove btn btn--icon" type="button" aria-label="Remove from shelf" hidden>✕</button>
+    </article>
+  </template>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
