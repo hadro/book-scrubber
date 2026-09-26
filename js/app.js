@@ -405,10 +405,8 @@ const cards = new Set();
 if (navigator.connection && navigator.connection.saveData) $("#density").value = "12";
 let density = Number($("#density").value);
 let flashTimer = null;
+// Plates-only and flash mode always start off: they're per-visit toggles, not settings.
 let platesOnly = false;
-try {
-  platesOnly = localStorage.getItem("book-scrubber:plates") === "1";
-} catch {}
 
 const visibility = new IntersectionObserver(
   (entries) => {
@@ -750,12 +748,11 @@ $("#density").addEventListener("change", (e) => {
   }
 });
 
-$("#plates-toggle").checked = platesOnly;
+// Browsers restore checkbox states on reload; reset them to match.
+$("#plates-toggle").checked = false;
+$("#flash-toggle").checked = false;
 $("#plates-toggle").addEventListener("change", (e) => {
   platesOnly = e.target.checked;
-  try {
-    localStorage.setItem("book-scrubber:plates", platesOnly ? "1" : "0");
-  } catch {}
   cards.forEach((c) => c.refreshTicks());
   if (platesOnly) track("plates-on", "Plates only on");
 });

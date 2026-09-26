@@ -40,3 +40,18 @@ test("a photo mounted on an album page is a plate", () => {
   const d = page((x, y) => (x > 8 && x < 40 && y > 10 && y < 34 ? [90 + (x % 9) * 8, 80 + (y % 7) * 9, 70] : null));
   assert.equal(classify(d).kind, "plate");
 });
+
+// Full-size synthetic pages shrunk the way a real thumbnail is (see synthetic-pages.mjs).
+import * as P from "./synthetic-pages.mjs";
+
+test("sepia photographs mounted on card are plates (Frith-style albums)", () => {
+  assert.equal(classify(P.sepiaPhoto()).kind, "plate");
+  assert.equal(classify(P.sepiaPhoto(0.15)).kind, "plate", "faded print");
+});
+
+test("printed text, dark or grey, stays text; a caption-only page is not a plate", () => {
+  assert.equal(classify(P.textPage()).kind, "text");
+  assert.equal(classify(P.textPage(90)).kind, "text");
+  assert.notEqual(classify(P.captionPage()).kind, "plate");
+  assert.equal(classify(P.blankPage()).kind, "blank");
+});

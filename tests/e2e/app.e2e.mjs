@@ -300,6 +300,19 @@ test("a shelf entry that resolves to a collection shows its first part", async (
   await ctx.close();
 });
 
+test("plates-only and flash mode start off again after a reload", async () => {
+  const { ctx, page } = await openApp({ shelf: ["mixed"] });
+  await page.check("#plates-toggle", { force: true });
+  await page.check("#flash-toggle", { force: true });
+  await page.reload();
+  await page.waitForSelector(".card .card-img.is-ready");
+  assert.equal(await page.isChecked("#plates-toggle"), false);
+  assert.equal(await page.isChecked("#flash-toggle"), false);
+  const counters = await hover(page, 0, 2500, Array.from({ length: 24 }, (_, k) => (k + 0.5) / 24));
+  assert.ok(counters.map(pageOf).some((p) => iiif.kindOfPage(p) === "text"), "text pages are back after reload");
+  await ctx.close();
+});
+
 test("pasting a collection shelves its books", async () => {
   const { ctx, page } = await openApp();
   await page.fill("#paste-input", `${iiif.origin}/c/shelf.json`);
