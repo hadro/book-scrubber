@@ -99,8 +99,9 @@ test("parseManifest: Presentation v3 with ImageService3, RTL", () => {
 test("parseManifest: v3 canvas without an image service falls back to the raw image", () => {
   const json = v3Manifest(2);
   delete json.items[1].items[0].items[0].body.service;
+  json.items[1].items[0].items[0].body.id = "https://img.example.org/plain/p1.jpg";
   const m = parseManifest(json);
-  assert.equal(pageImageUrl(m.pages[1], 300), "https://img.example.org/iiif3/p1/full/max/0/default.jpg");
+  assert.equal(pageImageUrl(m.pages[1], 300), "https://img.example.org/plain/p1.jpg");
 });
 
 test("parseManifest: level0 service uses a pre-baked size", () => {
@@ -243,4 +244,30 @@ test("followToManifest: plain manifests pass through, collections open their fir
   assert.equal(nested.url, "https://x.org/1911");
 
   await assert.rejects(followToManifest({ url: "x", json: { type: "Collection", items: [] } }, async () => ({})), /doesn't list any items/);
+});
+
+test("Choice bodies: prefer the option with a service, then a web format", () => {
+  const json = v3Manifest(1);
+  const anno = json.items[0].items[0].items[0];
+  anno.body = {
+    type: "Choice",
+    items: [
+      { id: "https://x.org/p0.tif", type: "Image", format: "image/tiff" },
+      { id: "https://x.org/p0.jpg", type: "Image", format: "image/jpeg", service: [{ id: "https://x.org/iiif/p0", type: "ImageService2" }] },
+    ],
+  };
+  assert.equal(pageImageUrl(parseManifest(json).pages[0], 300), "https://x.org/iiif/p0/full/300,/0/default.jpg");
+  anno.body.items[1] = { id: "https://x.org/p0.jpg", type: "Image", format: "image/jpeg" };
+  assert.equal(parseManifest(json).pages[0].imageUrl, "https://x.org/p0.jpg");
+});
+
+test("a IIIF image URL without a listed service still gets resized", () => {
+  const json = v3Manifest(1);
+  const body = json.items[0].items[0].items[0].body;
+  delete body.service;
+  body.id = "https://tile.example.gov/image-services/iiif/service:rbc:x:0001/full/pct:100/0/default.jpg";
+  assert.equal(
+    pageImageUrl(parseManifest(json).pages[0], 300),
+    "https://tile.example.gov/image-services/iiif/service:rbc:x:0001/full/300,/0/default.jpg"
+  );
 });

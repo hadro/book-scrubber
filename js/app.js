@@ -20,7 +20,7 @@ import { initAnalytics, track } from "./analytics.js";
 import { analyzeImage } from "./analyze.js";
 
 const STAGE_MAX_FRAMES = 150;
-const REEL_MAX = 150; // most frames a shelf card will hold
+const REEL_MAX = 150; // most frames a shelf card will hold (or one per pixel of card width, if wider)
 const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
 const PER_HOST = 3; // simultaneous image requests per server
 const HOVER_INTENT_MS = 150; // ignore mouse fly-bys shorter than this
@@ -363,20 +363,25 @@ class Book {
    * shows that page (baked file, 300px, 800px); whichever is already loaded
    * gets used. `fetch` marks the sampled frames the card may download itself.
    * Pages already loaded elsewhere (usually by the viewer) are added as extra
-   * frames for free, up to REEL_MAX.
+   * frames for free. At most `max` frames in all: if more pages are loaded
+   * than that, the extras are picked evenly across the whole book.
    */
-  reel(density) {
+  reel(density, max = REEL_MAX) {
     const live = this.data && this.data.pages;
     const liveUrls = (p) => (live ? [pageImageUrl(live[p], SMALL), pageImageUrl(live[p], BIG)] : []);
     const frames = new Map(); // page -> { cands, fetch }
     if (this.baked) this.baked.pages.forEach((p, k) => frames.set(p, { cands: [this.baked.files[k], ...liveUrls(p)], fetch: true }));
     else for (const p of sampleIndices(live.length, density)) frames.set(p, { cands: liveUrls(p), fetch: true });
     if (live) {
-      for (let p = 0; p < live.length && frames.size < REEL_MAX; p++) {
+      const extras = [];
+      for (let p = 0; p < live.length; p++) {
         if (frames.has(p)) continue;
         const cands = liveUrls(p);
-        if (cands.some((u) => loadedUrls.has(u))) frames.set(p, { cands, fetch: false });
+        if (cands.some((u) => loadedUrls.has(u))) extras.push([p, cands]);
       }
+      const room = Math.max(0, max - frames.size);
+      const keep = extras.length > room ? sampleIndices(extras.length, room).map((k) => extras[k]) : extras;
+      for (const [p, cands] of keep) frames.set(p, { cands, fetch: false });
     }
     const pages = [...frames.keys()].sort((a, b) => a - b);
     return {
@@ -491,7 +496,9 @@ class Card {
 
   buildFrames() {
     this.stopPreload(true);
-    this.reel = this.book.reel(density);
+    // One frame per pixel of card width at most, so every frame can be reached by the mouse.
+    const width = Math.round(this.cover.getBoundingClientRect().width) || 0;
+    this.reel = this.book.reel(density, Math.max(REEL_MAX, width));
     this.loaded = new Set();
     this.ticks.replaceChildren(...this.reel.pages.map(() => document.createElement("i")));
     // Anything already loaded (by the viewer, an earlier reel, the baked shelf) counts straight away.

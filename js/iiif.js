@@ -246,8 +246,28 @@ function describeThumb(thumb) {
   return { url, width: (t && t.width) || null, height: (t && t.height) || null };
 }
 
+const WEB_IMAGE = /^image\/(jpeg|png|gif|webp)/;
+const IIIF_IMAGE_URL = /^(https?:\/\/.+?)\/full\/[^/]+\/\d+(?:\.\d+)?\/(?:default|native|color|gray|bitonal)\.(?:jpg|jpeg|png|gif|webp)(?:\?.*)?$/i;
+
+/** From several alternative images (a IIIF Choice), pick one a browser can show. */
+function pickChoice(items) {
+  const opts = asArray(items).filter(Boolean);
+  return (
+    opts.find((o) => o.service) ||
+    opts.find((o) => WEB_IMAGE.test(o.format || "")) ||
+    opts.find((o) => IIIF_IMAGE_URL.test(idOf(o) || "")) ||
+    opts[0]
+  );
+}
+
 function makePage(canvas, body) {
-  const service = describeService(body && body.service);
+  let service = describeService(body && body.service);
+  // No service listed, but the image URL is itself a IIIF Image API request:
+  // recover the service from it, so we can ask for small sizes.
+  const direct = idOf(body);
+  if (!service && direct && IIIF_IMAGE_URL.test(direct)) {
+    service = { id: direct.match(IIIF_IMAGE_URL)[1], version: 2, level: 1, width: null, height: null, sizes: null };
+  }
   return {
     label: labelText(canvas.label),
     width: canvas.width,
@@ -271,7 +291,7 @@ function pageFromV3Canvas(canvas) {
   const page = asArray(canvas.items)[0];
   const anno = page && asArray(page.items)[0];
   let body = asArray(anno && anno.body)[0];
-  if (body && body.type === "Choice") body = asArray(body.items)[0];
+  if (body && body.type === "Choice") body = pickChoice(body.items);
   return makePage(canvas, body);
 }
 
