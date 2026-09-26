@@ -24,6 +24,8 @@ const REEL_MAX = 150; // most frames a shelf card will hold (or one per pixel of
 const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
 const PER_HOST = 3; // simultaneous image requests per server
 const HOVER_INTENT_MS = 150; // ignore mouse fly-bys shorter than this
+const KEEP_LOADING_MS = 600; // after a hover this long, finish loading the card even once the mouse leaves
+const MIN_PLATES = 3; // plates-only needs at least this many plates on a card, else it shows all non-blank pages
 const DWELL_MS = 200; // only fetch big images once scrubbing pauses
 const STORAGE_KEY = "book-scrubber:shelf";
 const MANIFEST_TTL_MS = 7 * 24 * 3600 * 1000; // re-check remembered manifests weekly
@@ -563,9 +565,15 @@ class Card {
     const nonBlank = [...this.loaded].filter((i) => this.kindOf(i) !== "blank");
     if (platesOnly) {
       const plates = nonBlank.filter((i) => this.kindOf(i) === "plate");
-      if (plates.length) return new Set(plates);
+      // A book with hardly any detected plates would leave an empty-looking card.
+      if (plates.length >= MIN_PLATES) return new Set(plates);
     }
     return new Set(nonBlank.length ? nonBlank : this.loaded);
+  }
+
+  /** Whether plates-only filtering is actually narrowing this card right now. */
+  platesActive() {
+    return platesOnly && [...this.loaded].filter((i) => this.kindOf(i) === "plate").length >= MIN_PLATES;
   }
 
   refreshTicks() {
@@ -593,7 +601,7 @@ class Card {
     setImg(this.img, this.loadedUrl(j) || this.reel.cands[j][0]);
     const tick = this.ticks.children[j];
     if (tick) tick.classList.add("is-current");
-    this.counter.textContent = `p. ${this.reel.pages[j] + 1} / ${this.book.total}`;
+    this.counter.textContent = `p. ${this.reel.pages[j] + 1} / ${this.book.total}${this.platesActive() ? " · plates" : ""}`;
   }
 
   /** Scrub to a 0..1 position across the card. */
@@ -622,8 +630,10 @@ class Card {
       intent = null;
     };
 
+    let enteredAt = 0;
     c.addEventListener("pointerenter", (e) => {
       cancelIntent();
+      enteredAt = performance.now();
       // A mouse just passing over shouldn't trigger two dozen downloads.
       const delay = e.pointerType === "mouse" ? HOVER_INTENT_MS : 0;
       intent = setTimeout(() => this.init().then(() => this.preload(), () => {}), delay);
@@ -642,7 +652,9 @@ class Card {
     const leave = () => {
       startX = null;
       cancelIntent();
-      this.stopPreload();
+      // A deliberate look: let the card's reel finish in the background (still
+      // at most 3 requests at a time per server). A quick pass: drop what's queued.
+      if (performance.now() - enteredAt < KEEP_LOADING_MS) this.stopPreload();
       this.reset();
     };
     c.addEventListener("pointerup", () => (startX = null));

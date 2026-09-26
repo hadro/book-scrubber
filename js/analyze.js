@@ -15,7 +15,7 @@ const SIZE = 48;
 let ctx = null;
 
 export const THRESHOLDS = {
-  blankSpread: 7,
+  blankSpread: 5, // low on purpose: showing a near-blank page beats hiding faint text
   blankColour: 5,
   plateColour: 18,
   plateSpread: 45,

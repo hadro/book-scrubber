@@ -109,6 +109,26 @@ test("politeness: fly-bys cost nothing, brief hovers little, repeats nothing", a
   await ctx.close();
 });
 
+test("a deliberate hover finishes loading the card; a quick pass doesn't", async () => {
+  const { ctx, page } = await openApp({ shelf: ["typical", "plain"] });
+  const covers = page.locator(".card-cover");
+  await covers.first().scrollIntoViewIfNeeded();
+  const [a, b] = await Promise.all([covers.nth(0).boundingBox(), covers.nth(1).boundingBox()]);
+  // Quick pass over card 2 (≈300 ms): queued requests are dropped when the mouse leaves.
+  await page.mouse.move(b.x + 20, b.y + 100);
+  await sleep(300);
+  await page.mouse.move(2, 2);
+  // Deliberate look at card 1 (≈900 ms), then away.
+  await page.mouse.move(a.x + 20, a.y + 100);
+  await sleep(900);
+  await page.mouse.move(2, 2);
+  await sleep(6500);
+  const loaded = (i) => page.locator(".card").nth(i).locator(".ticks i.is-loaded").count();
+  assert.equal(await loaded(0), 24, "the deliberately hovered card finished loading");
+  assert.ok((await loaded(1)) < 12, `the quickly passed card stopped early (${await loaded(1)})`);
+  await ctx.close();
+});
+
 test("viewer: opens, steps, and drops queued requests when closed", async () => {
   const { ctx, page } = await openApp({ shelf: ["oz"] });
   await page.locator(".card-cover").first().click();

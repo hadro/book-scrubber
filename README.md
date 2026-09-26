@@ -8,7 +8,7 @@ It's a small homage to the animated book thumbnails that used to flicker through
 
 - **Links to the source.** Every card links to its IIIF manifest and, when known, the item's page at its institution. The item page comes from, in order: a `page` set in `js/examples.js`, the manifest's `homepage` (v3) or `related` (v2), or the URL itself for IA, LoC, NYPL, e-codices, NGA and Yale. The viewer shows the same links.
 - **Hover-scrubber cards.** Mouse position maps to a page. Pages load "coarse first" (ends, then middle, then quarters, and so on), so you can scrub the whole book almost at once. On phones, drag a finger sideways across a card.
-- **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (brightness spread, colour and dark areas at 48×48 px) and labelled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
+- **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (brightness spread, colour and dark areas at 48×48 px) and labelled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations; the setting is remembered, and cards show "· plates" while it's filtering. Books with fewer than 3 detected plates show all non-blank pages instead. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
 - **Paste your own, or drag it in.** Accepts a IIIF Presentation v2 or v3 manifest or **collection** (its first 36 books go on the shelf), or a page URL from:
   - `archive.org/details/…`, or a bare IA identifier
   - `loc.gov/item/…`
@@ -97,7 +97,7 @@ Each resized page costs a IIIF server a decode of its master file, so the app ke
 - **Cheapest image first.** If a manifest lists a ready-made `thumbnail` of about the right size, that's used. Next come sizes the image server advertises as pre-rendered (`sizes`). Otherwise there are just two fixed widths, 300px and 800px, written in the canonical form for the server's Image API version (`w,h` for v3, `w,` for v2), so requests are more likely to hit caches other viewers have already warmed.
 - **At most 3 requests at a time per server,** dropping to 2 or 1 when a server responds slowly. A request still waiting in the queue is dropped as soon as nobody needs it.
 - **Backs off from failing servers.** After three failures in a row, that server's queue pauses for 2 seconds, doubling each time up to a minute.
-- **Hover intent.** A card starts loading its pages only after the mouse rests on it for 150ms, and stops queueing when the mouse leaves.
+- **Hover intent.** A card starts loading its pages only after the mouse rests on it for 150ms. If you move away within 600ms, whatever is still queued is dropped. After a longer, deliberate look, the card finishes loading its reel in the background, at most 3 requests at a time.
 - **Lazy viewer.** Opening a book loads a 24-page overview (the shelf's images), then small images near where you're scrubbing, plus one 800px image once you pause on a page. Closing it drops everything queued.
 - **Remembers what it fetched.**
   - Manifests are kept in the browser (IndexedDB) for a week. If a refresh fails, the old copy is used.
