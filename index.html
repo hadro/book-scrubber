@@ -31,6 +31,8 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#shelf">Skip to the shelf</a>
+  <p id="sr-status" class="visually-hidden" role="status" aria-live="polite"></p>
   <header class="masthead">
     <div class="masthead-inner">
       <p class="kicker">Est. circa 2012 · re-shelved for the IIIF era</p>
@@ -46,11 +48,11 @@
       <form id="paste-form" class="paste-form" autocomplete="off">
         <label id="paste-label" for="paste-input" class="paste-label">Shelve your own book <small>(or drag a IIIF logo onto the page)</small></label>
         <div class="paste-row">
-          <input id="paste-input" class="paste-input" type="text" inputmode="url" spellcheck="false"
+          <input id="paste-input" class="paste-input" type="text" inputmode="url" spellcheck="false" aria-describedby="paste-hint paste-status"
                  placeholder="Paste a IIIF manifest, or an archive.org / loc.gov / NYPL / BHL link…">
           <button type="submit" class="btn btn--pink">Shelve it!</button>
         </div>
-        <p class="paste-hint">Works with any IIIF Presentation v2 or v3 manifest or collection. It also understands
+        <p id="paste-hint" class="paste-hint">Works with any IIIF Presentation v2 or v3 manifest or collection. It also understands
           <code>archive.org/details/…</code>, <code>loc.gov/item/…</code>,
           <code>digitalcollections.nypl.org/items/…</code>, <code>library.nga.gov</code> records,
           links from IIIF viewers, or a bare Internet Archive identifier.</p>
@@ -79,7 +81,8 @@
       </label>
     </section>
 
-    <section id="shelf" class="shelf" aria-label="Books"></section>
+    <h2 id="shelf-heading" class="visually-hidden">The shelf</h2>
+    <section id="shelf" class="shelf" aria-labelledby="shelf-heading" tabindex="-1"></section>
   </main>
 
   <footer class="footer">
@@ -105,7 +108,11 @@
         </div>
         <input id="stage-range" class="range" type="range" min="0" max="0" value="0" step="1" aria-label="Scrub through pages">
         <div class="stage-buttons">
-          <button id="play-btn" class="btn btn--yellow" type="button">▶ Play</button>
+          <div class="step-buttons">
+            <button id="prev-btn" class="btn btn--step" type="button" aria-label="Previous page">←</button>
+            <button id="play-btn" class="btn btn--yellow" type="button">▶ Play</button>
+            <button id="next-btn" class="btn btn--step" type="button" aria-label="Next page">→</button>
+          </div>
           <label class="inline-field">
             <span>Speed</span>
             <input id="speed" type="range" min="1" max="24" value="8" aria-label="Frames per second">
@@ -124,8 +131,8 @@
         <h2 id="viewer-title" class="viewer-title">…</h2>
         <p id="viewer-meta" class="viewer-meta"></p>
         <p class="viewer-links">
-          <a id="viewer-home" target="_blank" rel="noopener" hidden>Item page ↗</a>
-          <a id="viewer-manifest" target="_blank" rel="noopener">IIIF manifest ↗</a>
+          <a id="viewer-home" target="_blank" rel="noopener" hidden>Item page ↗<span class="visually-hidden"> (opens in a new tab)</span></a>
+          <a id="viewer-manifest" target="_blank" rel="noopener">IIIF manifest ↗<span class="visually-hidden"> (opens in a new tab)</span></a>
           <button id="share-btn" class="linklike" type="button">Copy share link</button>
         </p>
 
@@ -171,9 +178,10 @@
           <p id="gif-error" class="gif-error" role="alert"></p>
           <figure id="gif-result" class="gif-result" hidden>
             <img id="gif-img" alt="Preview of the file you made">
-            <video id="gif-video" muted loop playsinline autoplay hidden></video>
+            <video id="gif-video" muted loop playsinline autoplay controls hidden></video>
             <figcaption>
               <a id="gif-download" class="btn btn--green" download="flipbook.gif">Download</a>
+              <button id="gif-pause" class="linklike" type="button" hidden>Pause preview</button>
               <span id="gif-size" class="gif-size"></span>
             </figcaption>
           </figure>
@@ -199,8 +207,8 @@
         <h3 class="card-title"></h3>
         <p class="card-note"></p>
         <p class="card-links">
-          <a class="card-link-page" target="_blank" rel="noopener" hidden>Item page ↗</a>
-          <a class="card-link-iiif" target="_blank" rel="noopener" title="IIIF manifest">IIIF ↗</a>
+          <a class="card-link-page" target="_blank" rel="noopener" hidden>Item page ↗<span class="visually-hidden"> (opens in a new tab)</span></a>
+          <a class="card-link-iiif" target="_blank" rel="noopener" title="IIIF manifest">IIIF<span class="visually-hidden"> manifest</span> ↗<span class="visually-hidden"> (opens in a new tab)</span></a>
         </p>
       </div>
       <button class="card-remove btn btn--icon" type="button" aria-label="Remove from shelf" hidden>✕</button>
