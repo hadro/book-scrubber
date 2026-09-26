@@ -51,6 +51,12 @@ export const EXAMPLES = [
     note: "Sahagún, 1577",
     input: "https://www.loc.gov/item/2021667857/",
   },
+  {
+    source: "getty",
+    title: "[The Overstone Album: portraits, tableaux, and noted personalities]",
+    note: "The Whisper of the Muse/Portrait of G.F Watts (Published Title)",
+    input: "https://media.getty.edu/iiif/manifest/3/adf5e1e6-7205-4763-9044-c3662212d163",
+  },
   //{
   //  source: "nypl",
   //  title: "The Negro Motorist Green-Book",
