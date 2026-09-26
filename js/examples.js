@@ -13,6 +13,7 @@ export const SOURCES = {
   nga: { name: "National Gallery of Art Library", short: "NGA", color: "var(--c-nga)" },
   getty: { name: "Getty Museum", short: "Getty", color: "var(--c-getty)" },
   yale: { name: "Yale University Library", short: "Yale", color: "var(--c-yale)" },
+  wellcome: { name: "Wellcome Collection", short: "Wellcome", color: "var(--c-wellcome)" },
   mine: { name: "Your pick", short: "yours", color: "var(--c-mine)" },
 };
 
@@ -146,6 +147,11 @@ export const EXAMPLES = [
     note: "Medieval manuscript",
     input: "https://www.e-codices.unifr.ch/metadata/iiif/csg-0040/manifest.json",
   },
+  {
+    // Title comes from the manifest.
+    source: "wellcome",
+    input: "https://iiif.wellcomecollection.org/presentation/v2/b11859556",
+  },
 ];
 
 /** Guess a source key from a manifest URL so pasted items get the right sticker. */
@@ -160,6 +166,7 @@ export function guessSource(url) {
     if (host.endsWith("nga.gov")) return "nga";
     if (host.endsWith("getty.edu")) return "getty";
     if (host.endsWith("yale.edu")) return "yale";
+    if (host.endsWith("wellcomecollection.org")) return "wellcome";
   } catch {}
   return "mine";
 }
