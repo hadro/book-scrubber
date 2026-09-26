@@ -18,8 +18,10 @@ jobs:
   bake:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history, so we can rebase onto newer commits before pushing
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - run: npm test
@@ -33,7 +35,13 @@ jobs:
             echo "Nothing new to commit."
           else
             git commit -m "Bake example shelf thumbnails"
-            git push
+            # Baking takes a while; the branch may have moved on meanwhile. We only
+            # add files under baked/, so rebasing onto newer commits is safe.
+            for attempt in 1 2 3; do
+              git pull --rebase origin "${{ github.ref_name }}" && git push && break
+              echo "Push failed (attempt $attempt); retrying..."
+              sleep 5
+            done
             # Pushes made with GITHUB_TOKEN don't trigger other workflows, so
             # redeploy the site explicitly when baking on main.
             if [ "${{ github.ref_name }}" = "main" ]; then
