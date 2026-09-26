@@ -28,7 +28,7 @@ It's a small homage to the animated book thumbnails that used to flicker through
 - **Exports.** GIF, video (WebM or MP4, whichever the browser can record) or a contact-sheet JPEG. Choose frames, width, speed and pages (no blanks, plates only, or all). A credit line with the title and institution is added by default. GIFs are encoded in the browser with [gifenc](https://github.com/mattdesl/gifenc), vendored in `vendor/`.
 - **Flash mode.** Every card cycles its pages at once, like the old IA search results.
 - Right-to-left books scrub in the right direction. Light and dark themes follow the OS setting.
-- **Accessible.** Arrow keys scrub a focused card, and focus returns to the card when the viewer closes. The OS "reduce motion" setting slows flash mode and playback and turns off decorative animation.
+- **Accessible (WCAG 2.2 AA).** Arrow keys scrub a focused card, and screen readers announce the page ("Page 12 of 240"). Focus returns to the card when the viewer closes, and the viewer has Previous/Next buttons as well as the slider. There is a skip link, and errors and export progress are announced. Colours pass contrast in light and dark themes, controls are at least 24×24 px, and the layout works at 320px wide. The OS "reduce motion" setting slows flash mode and playback and turns off decorative animation; the title wobble stops after a few seconds, and GIF previews have a pause button. `npm run test:e2e` runs an [axe-core](https://github.com/dequelabs/axe-core) audit of every screen, plus reflow, target-size and keyboard checks.
 - **Link previews.** Open Graph and Twitter card metadata, with a share image (`img/social-card.png`).
 
 ## Running locally
