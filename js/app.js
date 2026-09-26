@@ -1181,7 +1181,9 @@ if (!videoMime()) gifFormat.querySelector('option[value="video"]').remove();
 const FORMAT_LABEL = { gif: "GIF", video: "video", sheet: "contact sheet" };
 gifFormat.addEventListener("change", () => {
   resetGifUi();
-  $("#gif-delay").disabled = gifFormat.value === "sheet";
+  const delay = $("#gif-delay");
+  delay.disabled = gifFormat.value === "sheet";
+  delay.title = delay.disabled ? "Contact sheets don't move, so there's no speed to set" : "";
 });
 
 function resetGifUi() {

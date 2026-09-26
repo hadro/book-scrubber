@@ -585,6 +585,8 @@ select {
 .gif-box h3 { margin: 0 0 12px; font-size: 20px; }
 .gif-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
 .gif-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; }
+select:disabled { opacity: .4; border-style: dashed; cursor: not-allowed; }
+.gif-fields label:has(select:disabled) { color: var(--ink-soft); cursor: not-allowed; }
 .gif-fields select { width: 100%; }
 .gif-fields .check { flex-direction: row; align-items: center; gap: 8px; align-self: end; padding-bottom: 8px; }
 .gif-fields .check input { width: 18px; height: 18px; accent-color: var(--pink); }

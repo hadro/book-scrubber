@@ -181,6 +181,9 @@ test("exports: GIF, contact sheet and (where supported) video, with credit line"
   const gif = await make("gif");
   assert.equal(String.fromCharCode(...gif.head), "GIF89a");
   assert.match(gif.name, /\.gif$/);
+  assert.equal(await page.isDisabled("#gif-delay"), false);
+  await page.selectOption("#gif-format", "sheet");
+  assert.equal(await page.isDisabled("#gif-delay"), true, "speed is greyed out for contact sheets");
   const sheet = await make("sheet");
   assert.deepEqual(sheet.head.slice(0, 2), [0xff, 0xd8], "contact sheet is a JPEG");
   if (await page.locator('#gif-format option[value="video"]').count()) {
