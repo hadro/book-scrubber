@@ -63,6 +63,7 @@ export async function checkExample(ex, { fetchImpl = fetch } = {}) {
   const img = pageImageUrl(m.pages[Math.min(1, m.pages.length - 1)], SMALL);
   try {
     const { res, ms } = await timed(fetchImpl, img, { "User-Agent": USER_AGENT, Origin: SITE_ORIGIN });
+    row.sample = img;
     const type = res.headers.get("content-type") || "?";
     if (!res.ok || !/^image\//.test(type)) {
       row.image = `HTTP ${res.status} ${type}`;
@@ -86,7 +87,8 @@ export function toMarkdown(rows) {
     ...rows.map((r) => `| ${r.ok ? "✅" : "❌"} | ${r.title} | ${r.manifest} | ${r.pages} | ${r.image} | ${r.cors} | ${r.extras} |`),
   ];
   const bad = rows.filter((r) => !r.ok).length;
-  return `## Example shelf health\n\n${bad ? `**${bad} of ${rows.length} examples are broken.**` : `All ${rows.length} examples work.`}\n\n${lines.join("\n")}\n`;
+  const samples = rows.filter((r) => r.sample).map((r) => `- ${r.title}: ${r.manifestUrl || ""} → ${r.sample}`);
+  return `## Example shelf health\n\n${bad ? `**${bad} of ${rows.length} examples are broken.**` : `All ${rows.length} examples work.`}\n\n${lines.join("\n")}\n\n<details><summary>Manifest and sample image URLs</summary>\n\n${samples.join("\n")}\n</details>\n`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

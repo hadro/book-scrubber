@@ -58,6 +58,7 @@ const KINDS = ["blank", "text", "text", "plate", "plate", "plate"];
 // name: [presentation version, pages, image behaviour]
 const BOOKS = {
   plain: [3, 60, "ok"],
+  big: [3, 400, "ok"],
   oz: [2, 96, "ok"],
   mixed: [3, 120, "ok"],
   nostore: [3, 60, "nostore"],

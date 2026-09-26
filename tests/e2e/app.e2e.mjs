@@ -151,6 +151,35 @@ test("pages loaded in the viewer are reused by the shelf card", async () => {
   await ctx.close();
 });
 
+test("on a long book, every page the viewer loaded is reachable on the card", async () => {
+  const { ctx, page } = await openApp({ shelf: ["big"] });
+  await page.locator(".card-cover").first().click();
+  await page.waitForFunction(() => /p\. \d+ \/ 400/.test(document.querySelector("#stage-counter").textContent));
+  await page.focus("#play-btn");
+  for (let k = 0; k < 170; k++) {
+    await page.keyboard.press("ArrowRight");
+    await sleep(50);
+  }
+  await sleep(1500);
+  const loaded = new Set(Object.keys(iiif.stats().urls).filter((u) => u.includes("/big/")).map((u) => Number(u.match(/\/p(\d+)\//)[1])));
+  await page.mouse.move(2, 2);
+  await page.keyboard.press("Escape");
+  await sleep(300);
+  const cover = page.locator(".card-cover").first();
+  await cover.scrollIntoViewIfNeeded();
+  const box = await cover.boundingBox();
+  const shown = new Set();
+  await page.mouse.move(box.x + 1, box.y + 100);
+  await sleep(300);
+  for (let x = 0; x <= box.width; x += 0.5) {
+    await page.mouse.move(box.x + x, box.y + 100);
+    shown.add(pageOf(await cover.locator(".counter").textContent()));
+  }
+  const missing = [...loaded].filter((p) => !shown.has(p));
+  assert.deepEqual(missing, [], `pages loaded in the viewer but unreachable on the card (${loaded.size} loaded)`);
+  await ctx.close();
+});
+
 test("manifests are remembered across reloads", async () => {
   const { ctx, page } = await openApp({ shelf: ["plain", "oz"] });
   const first = iiif.stats().manifests;
