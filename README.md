@@ -56,7 +56,7 @@ The end-to-end tests never contact real libraries. They start a local fake IIIF 
 
 **GitHub Pages:** one-time setup: Settings → Pages → Source: **GitHub Actions**. After that, every push to `main` deploys via `.github/workflows/pages.yml`, which also includes `baked/` when it exists.
 
-The link-preview metadata in `index.html` assumes the site lives at `https://hadro.github.io/book-scrubber/`. Update those URLs if it moves or gets a custom domain. To change the share image, edit `tools/social-card.html` and run `npm run social-card`.
+The link-preview metadata in `index.html` assumes the site lives at `https://hadro.github.io/flipbook/`. Update those URLs if it moves or gets a custom domain. To change the share image, edit `tools/social-card.html` and run `npm run social-card`.
 
 **Hugging Face Spaces:** create a *Static* Space and push these files. HF needs this front-matter at the top of the Space's `README.md`:
 
@@ -138,7 +138,7 @@ Flipbook is a static web page. Everything runs in visitors' browsers, so request
 
 The example shelf's thumbnails are downloaded once, by the "Bake example shelf" GitHub Action (User-Agent `flipbook example baker`), and served from this repository.
 
-If Flipbook is causing you trouble, or you'd rather your collection not appear on the example shelf, please [open an issue](https://github.com/hadro/book-scrubber/issues) and it will be dealt with promptly.
+If Flipbook is causing you trouble, or you'd rather your collection not appear on the example shelf, please [open an issue](https://github.com/hadro/flipbook/issues) and it will be dealt with promptly.
 
 ## Analytics
 
