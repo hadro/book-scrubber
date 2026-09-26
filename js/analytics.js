@@ -2,7 +2,7 @@
 //
 // To turn it on, set GOATCOUNTER_CODE to your site code, i.e. the "mycode" in
 // https://mycode.goatcounter.com. While it's empty nothing is loaded or sent.
-export const GOATCOUNTER_CODE = "book-scrubber";
+export const GOATCOUNTER_CODE = "book-scrubber"; // the dashboard name from before the rename to Flipbook; only its owner sees it
 
 const queue = [];
 let ready = false;

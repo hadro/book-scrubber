@@ -16,7 +16,7 @@ import { EXAMPLES } from "../js/examples.js";
 import { resolveInput, followToManifest, parseManifest, pageImageUrl, sampleIndices, SMALL } from "../js/iiif.js";
 
 export const BAKED_FRAMES = 24;
-const USER_AGENT = "flipbook example baker (https://github.com/hadro/book-scrubber)";
+const USER_AGENT = "flipbook example baker (https://github.com/hadro/flipbook)";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
