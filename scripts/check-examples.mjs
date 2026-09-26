@@ -9,7 +9,7 @@
 import { appendFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { EXAMPLES } from "../js/examples.js";
-import { resolveInput, parseManifest, pageImageUrl, SMALL } from "../js/iiif.js";
+import { resolveInput, followToManifest, parseManifest, pageImageUrl, SMALL } from "../js/iiif.js";
 
 const USER_AGENT = "book-scrubber example health check (https://github.com/hadro/book-scrubber)";
 const SITE_ORIGIN = "https://hadro.github.io";
@@ -44,6 +44,10 @@ export async function checkExample(ex, { fetchImpl = fetch } = {}) {
 
   let m;
   try {
+    const followed = await followToManifest({ url, json }, async (u) => ({ url: u, json: await (await fetchImpl(u, { headers })).json() }));
+    if (followed.part) row.manifest += ` (collection: part 1 of ${followed.part.of})`;
+    json = followed.json;
+    url = followed.url;
     m = parseManifest(json);
   } catch (err) {
     row.manifest = `unusable: ${err.message}`;

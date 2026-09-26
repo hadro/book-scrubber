@@ -13,7 +13,7 @@ import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXAMPLES } from "../js/examples.js";
-import { resolveInput, parseManifest, pageImageUrl, sampleIndices, SMALL } from "../js/iiif.js";
+import { resolveInput, followToManifest, parseManifest, pageImageUrl, sampleIndices, SMALL } from "../js/iiif.js";
 
 export const BAKED_FRAMES = 24;
 const USER_AGENT = "book-scrubber example baker (https://github.com/hadro/book-scrubber)";
@@ -73,6 +73,11 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
         }
       }
       if (!json) throw new Error("no manifest could be fetched");
+      // Multi-part records can be collections: use the first part, like the site does.
+      ({ url: manifestUrl, json } = await followToManifest({ url: manifestUrl, json }, async (u) => ({
+        url: u,
+        json: await (await fetchWithRetry(fetchImpl, u, { headers })).json(),
+      })));
       const m = parseManifest(json);
       const pages = sampleIndices(m.pages.length, BAKED_FRAMES);
 

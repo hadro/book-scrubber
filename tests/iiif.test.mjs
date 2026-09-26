@@ -12,6 +12,7 @@ import {
   collectionMembers,
   isCollection,
   itemPageFromUrl,
+  followToManifest,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -210,4 +211,31 @@ test("item pages are derived from manifest and catalog URLs", () => {
   assert.equal(itemPageFromUrl("kunstformenderna00haec"), "https://archive.org/details/kunstformenderna00haec");
   assert.equal(itemPageFromUrl("https://media.getty.edu/iiif/manifest/3/ad56409c"), null);
   assert.equal(itemPageFromUrl("https://example.org/iiif/book/manifest.json"), null);
+});
+
+test("followToManifest: plain manifests pass through, collections open their first part", async () => {
+  const m = v3Manifest(3);
+  const plain = await followToManifest({ url: "https://x.org/m", json: m }, async () => assert.fail("no fetch needed"));
+  assert.equal(plain.part, null);
+  assert.equal(plain.json, m);
+
+  const coll = { type: "Collection", label: { en: ["Woods directory"] }, items: [
+    { id: "https://x.org/1911", type: "Manifest", label: { en: ["1911"] } },
+    { id: "https://x.org/1912", type: "Manifest", label: { en: ["1912"] } },
+    { id: "https://x.org/1913", type: "Manifest", label: { en: ["1913"] } },
+  ] };
+  const fetched = [];
+  const out = await followToManifest({ url: "https://x.org/item", json: coll }, async (u) => (fetched.push(u), { url: u, json: m }));
+  assert.deepEqual(fetched, ["https://x.org/1911"]);
+  assert.equal(out.url, "https://x.org/1911");
+  assert.deepEqual(out.part, { collection: "Woods directory", label: "1911", index: 1, of: 3 });
+
+  // Nested: a collection of collections.
+  const outer = { type: "Collection", label: "Outer", items: [{ id: "https://x.org/inner", type: "Collection", label: "Inner" }] };
+  const nested = await followToManifest({ url: "https://x.org/outer", json: outer }, async (u) =>
+    u.endsWith("inner") ? { url: u, json: coll } : { url: u, json: m }
+  );
+  assert.equal(nested.url, "https://x.org/1911");
+
+  await assert.rejects(followToManifest({ url: "x", json: { type: "Collection", items: [] } }, async () => ({})), /doesn't list any items/);
 });

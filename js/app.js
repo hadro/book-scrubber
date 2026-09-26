@@ -4,6 +4,7 @@ import {
   itemPageFromUrl,
   isCollection,
   collectionMembers,
+  followToManifest,
   fetchFirstManifest,
   parseManifest,
   pageImageUrl,
@@ -343,10 +344,12 @@ class Book {
       this._loading = manifestSlots(async () => {
         const candidates = resolveInput(this.input);
         if (!candidates.length) throw new Error(inputHint(this.input) || "That doesn't look like a URL or an identifier.");
-        const { url, json } = await loadManifest(candidates);
+        // Multi-part records can resolve to a collection: take its first part.
+        const { url, json, part } = await followToManifest(await loadManifest(candidates), (u) => loadManifest([u]));
         this.manifestUrl = url;
         this.data = parseManifest(json);
-        if (!this.title) this.title = this.data.label;
+        this.part = part;
+        if (!this.title) this.title = (part && part.collection) || this.data.label;
         return this.data;
       });
       this._loading.catch(() => {});
@@ -426,7 +429,9 @@ class Card {
     $(".card-title", this.el).textContent = this.book.title || "Loading…";
     const n = this.book.total;
     const pages = n ? `${n} ${n === 1 ? "image" : "pages"}` : "";
-    $(".card-note", this.el).textContent = [this.book.note, pages].filter(Boolean).join(" · ");
+    const p = this.book.part;
+    const part = p && p.of > 1 ? `${p.label || "part 1"} (1 of ${p.of})` : "";
+    $(".card-note", this.el).textContent = [this.book.note, part, pages].filter(Boolean).join(" · ");
     this.cover.setAttribute("aria-label", `${this.book.title || "Book"}: open flipbook`);
     const page = $(".card-link-page", this.el);
     page.hidden = !this.book.itemPage;
@@ -1004,7 +1009,8 @@ async function openViewer(book, { page = null } = {}) {
   if (start != null) pages.add(start);
   setFrames([...pages].sort((a, b) => a - b), keepPage);
   const sampled = V.frames.length < d.pages.length ? ` · scrubbing ${V.frames.length} of them` : "";
-  viewerMeta.textContent = [`${d.pages.length} images${sampled}`, d.attribution].filter(Boolean).join(" · ");
+  const part = book.part && book.part.of > 1 ? `Showing part 1 of ${book.part.of}${book.part.label ? ` (${book.part.label})` : ""}` : "";
+  viewerMeta.textContent = [part, `${d.pages.length} images${sampled}`, d.attribution].filter(Boolean).join(" · ");
 
   // A coarse overview so the slider works end to end: the same small images the
   // shelf card uses (usually already cached), or nothing at all for baked books.

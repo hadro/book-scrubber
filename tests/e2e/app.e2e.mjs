@@ -215,6 +215,16 @@ test("blank pages are skipped; plates-only keeps just the pictures", async () =>
   await ctx.close();
 });
 
+test("a shelf entry that resolves to a collection shows its first part", async () => {
+  const { ctx, page } = await openApp({ shelf: [`${iiif.origin}/c/shelf.json`] });
+  await page.waitForFunction(() => /1 of 3/.test(document.querySelector(".card-note").textContent));
+  assert.equal(await page.textContent(".card-title"), "A small collection");
+  assert.match(await page.textContent(".card-note"), /Book plain \(1 of 3\) · 60 pages/);
+  await page.locator(".card-cover").first().click();
+  await page.waitForFunction(() => /part 1 of 3/.test(document.querySelector("#viewer-meta").textContent));
+  await ctx.close();
+});
+
 test("pasting a collection shelves its books", async () => {
   const { ctx, page } = await openApp();
   await page.fill("#paste-input", `${iiif.origin}/c/shelf.json`);

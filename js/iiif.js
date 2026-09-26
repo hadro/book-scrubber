@@ -290,6 +290,33 @@ export function collectionMembers(json) {
   return { label: labelText(json.label), manifests: out, subCollections };
 }
 
+/**
+ * Some catalog records (multi-volume or multi-edition items, like many at LoC)
+ * resolve to a Collection rather than a Manifest. Follow it to its first
+ * manifest (through at most two levels of nesting).
+ *
+ * `fetchJson(url)` must resolve to { url, json }.
+ * Resolves to { url, json, part } where part is null for a plain manifest, or
+ * { collection, label, index, of } describing which part was picked.
+ */
+export async function followToManifest(first, fetchJson) {
+  let { url, json } = first;
+  let part = null;
+  for (let depth = 0; isCollection(json) && depth < 3; depth++) {
+    const { label, manifests } = collectionMembers(json);
+    const nested = asArray(json.items).concat(asArray(json.collections)).find((m) => /Collection/.test(m.type || m["@type"] || ""));
+    const next = manifests[0] || (nested && { id: idOf(nested), label: labelText(nested.label) });
+    if (!next || !next.id) {
+      const e = new Error("That collection doesn't list any items.");
+      e.name = "ManifestError";
+      throw e;
+    }
+    if (!part) part = { collection: label, label: next.label, index: 1, of: manifests.length || 1 };
+    ({ url, json } = await fetchJson(next.id));
+  }
+  return { url, json, part };
+}
+
 /** Flatten a v2 or v3 manifest into {label, pages[], rtl, attribution}. */
 export function parseManifest(json) {
   if (!json || typeof json !== "object") throw new Error("Not a JSON object");
