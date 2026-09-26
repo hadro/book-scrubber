@@ -28,12 +28,12 @@ export const EXAMPLES = [
     note: "Baum & Denslow, 1900",
     input: "https://www.loc.gov/item/03032405/",
   },
-  {
-    source: "nypl",
-    title: "The Negro Motorist Green-Book",
-    note: "1940 edition",
-    input: "https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928",
-  },
+  //{
+  //  source: "nypl",
+  //  title: "The Negro Motorist Green-Book",
+  //  note: "1940 edition",
+  //  input: "https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928",
+  //},
   {
     source: "nypl",
     title: "Shiohi no tsuto (Gifts of the Ebb Tide)",
@@ -73,25 +73,25 @@ export const EXAMPLES = [
     input:
       "https://library.nga.gov/discovery/fulldisplay?context=L&vid=01NGA_INST:NGA&search_scope=MainLibrary&tab=MainLibrary&lang=en&docid=alma99826713504896",
   },
-  {
-    source: "getty",
-    title: "Japanese Album",
-    note: "Kusakabe Kimbei, 1870s–1890s",
-    input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
-    page: "https://www.getty.edu/art/collection/object/104GAQ",
-  },
+ // {
+ //   source: "getty",
+ //   title: "Japanese Album",
+ //   note: "Kusakabe Kimbei, 1870s–1890s",
+ //   input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
+ //   page: "https://www.getty.edu/art/collection/object/104GAQ",
+ // },
   {
     // Title comes from the manifest.
     source: "getty",
     note: "Getty Museum album",
     input: "https://media.getty.edu/iiif/manifest/3/01b5ac79-78d9-4900-a51b-5ba13c19b6de",
   },
-  {
-    source: "ia",
-    title: "Alice's Adventures in Wonderland",
-    note: "Carroll & Tenniel",
-    input: "https://archive.org/details/carroll-lewis-alices-adventures-in-wonderland-illustrated-by-tenniel-john.-v-1.0",
-  },
+  //{
+  //  source: "ia",
+  //  title: "Alice's Adventures in Wonderland",
+  //  note: "Carroll & Tenniel",
+  //  input: "https://archive.org/details/carroll-lewis-alices-adventures-in-wonderland-illustrated-by-tenniel-john.-v-1.0",
+  //},
   {
     source: "ecod",
     title: "St. Gallen, Cod. Sang. 40",
