@@ -27,7 +27,8 @@ const HOVER_INTENT_MS = 150; // ignore mouse fly-bys shorter than this
 const KEEP_LOADING_MS = 600; // after a hover this long, finish loading the card even once the mouse leaves
 const MIN_PLATES = 3; // plates-only needs at least this many plates on a card, else it shows all non-blank pages
 const DWELL_MS = 200; // only fetch big images once scrubbing pauses
-const STORAGE_KEY = "book-scrubber:shelf";
+const STORAGE_KEY = "flipbook:shelf";
+const LEGACY_STORAGE_KEY = "book-scrubber:shelf"; // before the rename to Flipbook
 const MANIFEST_TTL_MS = 7 * 24 * 3600 * 1000; // re-check remembered manifests weekly
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -286,7 +287,7 @@ function friendlyError(err) {
 
 function readShelf() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || "[]");
   } catch {
     return [];
   }
@@ -460,7 +461,7 @@ class Card {
     const p = this.book.part;
     const part = p && p.of > 1 ? `${p.label || "part 1"} (1 of ${p.of})` : "";
     $(".card-note", this.el).textContent = [this.book.note, part, pages].filter(Boolean).join(" · ");
-    this.cover.setAttribute("aria-label", `${this.book.title || "Book"}: open flipbook`);
+    this.cover.setAttribute("aria-label", `${this.book.title || "Book"}: open book`);
     const page = $(".card-link-page", this.el);
     page.hidden = !this.book.itemPage;
     if (!page.hidden) page.href = this.book.itemPage;
@@ -904,7 +905,7 @@ pasteForm.addEventListener("submit", async (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// Viewer (flipbook + GIF maker)
+// Viewer (big page view + exports)
 // ---------------------------------------------------------------------------
 //
 // The viewer never bulk-downloads the book. It shows the best image it already

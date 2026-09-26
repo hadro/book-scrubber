@@ -1,4 +1,4 @@
-// Book Scrubber service worker: a long-lived cache for IIIF page images.
+// Flipbook service worker: a long-lived cache for IIIF page images.
 //
 // Many image servers send short (or no) cache headers, so without this a
 // returning visitor would re-request the same thumbnails. We keep CORS-mode
@@ -6,14 +6,22 @@
 // (the app's own files, baked thumbnails, manifests, images from servers
 // without CORS) passes straight through.
 
-const CACHE = "iiif-images-v1";
+const CACHE = "flipbook-iiif-images-v1";
 const MAX_ENTRIES = 1500;
 const MAX_AGE_MS = 30 * 24 * 3600 * 1000;
-const STAMP = "x-book-scrubber-cached-at";
+const STAMP = "x-flipbook-cached-at";
 let putsSinceTrim = 0;
 
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    // Drop caches from older versions (including the pre-rename "iiif-images-v1").
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  )
+);
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;

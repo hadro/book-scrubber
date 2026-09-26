@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Book Scrubber</title>
+  <title>Flipbook</title>
   <meta name="description" content="Hover over digitized books to flip through their pages. Paste any IIIF manifest or collection. Make GIFs, videos and contact sheets.">
   <!-- Link previews. SITE_URL assumes GitHub Pages at hadro.github.io/book-scrubber; change these if it moves. -->
   <link rel="canonical" href="https://hadro.github.io/book-scrubber/">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Book Scrubber">
-  <meta property="og:title" content="Book Scrubber">
+  <meta property="og:site_name" content="Flipbook">
+  <meta property="og:title" content="Flipbook">
   <meta property="og:description" content="Flip through centuries of digitized books by wiggling your mouse. Paste any IIIF manifest. Make GIFs.">
   <meta property="og:url" content="https://hadro.github.io/book-scrubber/">
   <meta property="og:image" content="https://hadro.github.io/book-scrubber/img/social-card.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Book Scrubber: three tilted book cards showing a flower, a text page and a shell, with a mouse cursor scrubbing across them.">
+  <meta property="og:image:alt" content="Flipbook: three tilted book cards showing a flower, a text page and a shell, with a mouse cursor scrubbing across them.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Book Scrubber">
+  <meta name="twitter:title" content="Flipbook">
   <meta name="twitter:description" content="Flip through centuries of digitized books by wiggling your mouse. Paste any IIIF manifest. Make GIFs.">
   <meta name="twitter:image" content="https://hadro.github.io/book-scrubber/img/social-card.png">
-  <meta name="twitter:image:alt" content="Book Scrubber: three tilted book cards being scrubbed with a mouse cursor.">
+  <meta name="twitter:image:alt" content="Flipbook: three tilted book cards being scrubbed with a mouse cursor.">
   <meta name="theme-color" content="#f6efe2" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1b1813" media="(prefers-color-scheme: dark)">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
@@ -34,11 +34,10 @@
   <header class="masthead">
     <div class="masthead-inner">
       <p class="kicker">Est. circa 2012 · re-shelved for the IIIF era</p>
-      <h1 class="title" aria-label="Book Scrubber">
-        <span class="title-word">Book</span>
-        <span class="title-word title-word--alt">Scrubber</span>
+      <h1 class="title" aria-label="Flipbook">
+        <span class="title-word">Flip</span><span class="title-word title-word--alt">book</span>
       </h1>
-      <p class="tagline"><span class="only-hover">Hover over a book and wiggle your mouse</span><span class="only-touch">Drag a finger sideways across a book</span> to flip through centuries of pages. <span class="only-hover">Click</span><span class="only-touch">Tap</span> one to open the flipbook and make a GIF.</p>
+      <p class="tagline"><span class="only-hover">Hover over a book and wiggle your mouse</span><span class="only-touch">Drag a finger sideways across a book</span> to flip through centuries of pages. <span class="only-hover">Click</span><span class="only-touch">Tap</span> one to open it up and make a GIF.</p>
     </div>
   </header>
 
@@ -87,7 +86,7 @@
     <p>Images are loaded directly from each library's IIIF servers.
       Rights and attribution belong to the holding institutions; see each item's source link.</p>
     <p>Inspired by the animated book thumbnails that used to flicker through Internet Archive search results.</p>
-    <p>Run a IIIF image server? <a href="https://github.com/hadro/book-scrubber#for-iiif-server-administrators">Here's how Book Scrubber treats it, and how to reach us.</a></p>
+    <p>Run a IIIF image server? <a href="https://github.com/hadro/book-scrubber#for-iiif-server-administrators">Here's how Flipbook treats it, and how to reach us.</a></p>
   </footer>
 
   <div id="drop-overlay" class="drop-overlay" hidden aria-hidden="true">
@@ -174,7 +173,7 @@
             <img id="gif-img" alt="Preview of the file you made">
             <video id="gif-video" muted loop playsinline autoplay hidden></video>
             <figcaption>
-              <a id="gif-download" class="btn btn--green" download="book-scrubber.gif">Download</a>
+              <a id="gif-download" class="btn btn--green" download="flipbook.gif">Download</a>
               <span id="gif-size" class="gif-size"></span>
             </figcaption>
           </figure>
@@ -184,7 +183,7 @@
     </div>
   </dialog>
 
-  <p id="card-hint" class="visually-hidden">Use the left and right arrow keys to flip through pages. Press Enter to open the flipbook.</p>
+  <p id="card-hint" class="visually-hidden">Use the left and right arrow keys to flip through pages. Press Enter to open the book.</p>
 
   <template id="card-template">
     <article class="card">

@@ -1,5 +1,5 @@
 {
-  "name": "book-scrubber",
+  "name": "flipbook",
   "private": true,
   "type": "module",
   "description": "Hover-to-scrub through digitized books from any IIIF manifest, and make GIFs.",

@@ -22,10 +22,10 @@
     font: 700 18px "SpaceMono", monospace; letter-spacing: .06em; text-transform: uppercase;
     padding: 6px 14px; border: 3px solid var(--ink); border-radius: 999px; background: #fffaf0; transform: rotate(-2deg);
   }
-  h1 { position: absolute; left: 62px; top: 132px; font-size: 128px; line-height: .84; font-weight: 800; letter-spacing: -.045em; }
-  h1 span { display: block; -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; text-shadow: 8px 8px 0 var(--ink); }
+  h1 { position: absolute; left: 62px; top: 190px; font-size: 138px; white-space: nowrap; line-height: .84; font-weight: 800; letter-spacing: -.045em; }
+  h1 span { display: inline-block; -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; text-shadow: 8px 8px 0 var(--ink); }
   h1 .a { color: var(--pink); transform: rotate(-2deg); }
-  h1 .b { color: var(--yellow); transform: rotate(1.5deg) translateY(6px); }
+  h1 .b { color: var(--yellow); transform: rotate(1.5deg) translateY(6px); margin-left: -4px; }
   .tag { position: absolute; left: 72px; top: 420px; width: 600px; font-size: 29px; font-weight: 700; line-height: 1.25; }
   .tag small { display: block; margin-top: 16px; font: 700 15px "SpaceMono", monospace; color: #5b5347; white-space: nowrap; }
 
@@ -52,7 +52,7 @@
 <body>
   <div class="card" id="card">
     <p class="kicker">Hover · scrub · flip</p>
-    <h1><span class="a">Book</span><span class="b">Scrubber</span></h1>
+    <h1><span class="a">Flip</span><span class="b">book</span></h1>
     <p class="tag">Flip through centuries of digitized books. Paste any IIIF manifest. Make GIFs.
       <small>Internet Archive · LoC · NYPL · BHL · Getty · NGA · e-codices</small></p>
 
