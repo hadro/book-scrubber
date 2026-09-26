@@ -1,6 +1,8 @@
 // The starter shelf. `input` can be anything resolveInput() understands:
 // a manifest URL, a catalog page URL, or a bare Internet Archive identifier.
-// Titles here are just placeholders until the manifest loads.
+// Titles here are just placeholders until the manifest loads. `page` (optional)
+// is the item's web page, for when it can't be worked out from `input` or the
+// manifest's own `homepage`.
 
 export const SOURCES = {
   ia: { name: "Internet Archive", short: "IA", color: "var(--c-ia)" },
@@ -76,6 +78,7 @@ export const EXAMPLES = [
     title: "Japanese Album",
     note: "Kusakabe Kimbei, 1870s–1890s",
     input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
+    page: "https://www.getty.edu/art/collection/object/104GAQ",
   },
   {
     // Title comes from the manifest.

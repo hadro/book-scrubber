@@ -127,6 +127,38 @@ export function contentStateManifest(value) {
   return find(json);
 }
 
+/**
+ * The human-facing item page for a manifest or catalog URL, when the pattern is
+ * known (or when the URL already is a web page rather than a manifest).
+ */
+export function itemPageFromUrl(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    return /^[A-Za-z0-9._-]+$/.test(raw || "") ? `https://archive.org/details/${raw}` : null;
+  }
+  const host = url.hostname.replace(/^www\./, "");
+  const path = url.pathname;
+  let m;
+  if (host === "iiif.archive.org" && (m = path.match(/^\/iiif\/(?:3\/)?([^/]+)\/manifest\.json$/))) {
+    return `https://archive.org/details/${m[1]}`;
+  }
+  if (host === "loc.gov" && (m = path.match(/^\/item\/([^/]+)\/manifest\.json$/))) return `https://www.loc.gov/item/${m[1]}/`;
+  if (host === "api-collections.nypl.org" && (m = path.match(/^\/manifests\/([0-9a-f-]{36})/i))) {
+    return `https://digitalcollections.nypl.org/items/${m[1]}`;
+  }
+  if (host === "e-codices.unifr.ch" && (m = path.match(/\/metadata\/iiif\/([a-z]+)-([^/]+)\/manifest\.json$/))) {
+    return `https://www.e-codices.unifr.ch/en/list/one/${m[1]}/${m[2]}`;
+  }
+  if (host === "libraryimage.nga.gov" && (m = path.match(/^\/manifest\/mms\/(\d+)\.json$/))) {
+    return `https://library.nga.gov/discovery/fulldisplay?vid=01NGA_INST:NGA&docid=alma${m[1]}`;
+  }
+  // Not a manifest-looking address: it's probably the item page itself.
+  if (!/manifest|\/iiif\/|\.json$/i.test(path + url.search)) return url.toString();
+  return null;
+}
+
 export const iaManifest = (id) => `https://iiif.archive.org/iiif/3/${id}/manifest.json`;
 
 /** A friendlier explanation for inputs we know can't be resolved directly. */

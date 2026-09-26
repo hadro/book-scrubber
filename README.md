@@ -6,6 +6,7 @@ It's a small homage to the animated book thumbnails that used to flicker through
 
 ## Features
 
+- **Links to the source.** Every card links to its IIIF manifest and, when known, the item's page at its institution. The item page comes from, in order: a `page` set in `js/examples.js`, the manifest's `homepage` (v3) or `related` (v2), or the URL itself for IA, LoC, NYPL, e-codices and NGA. The viewer shows the same links.
 - **Hover-scrubber cards.** Mouse position maps to a page. Pages load "coarse first" (ends, then middle, then quarters, and so on), so you can scrub the whole book almost at once. On phones, drag a finger sideways across a card.
 - **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (brightness spread, colour and dark areas at 48×48 px) and labelled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
 - **Paste your own, or drag it in.** Accepts a IIIF Presentation v2 or v3 manifest or **collection** (its first 36 books go on the shelf), or a page URL from:
@@ -23,7 +24,7 @@ It's a small homage to the animated book thumbnails that used to flicker through
   BHL doesn't publish IIIF manifests at a predictable address. Paste the book's archive.org link instead; BHL hosts its scans there.
 
   Pasted books stay on your shelf in `localStorage`.
-- **Flipbook viewer.** Scrubbing, play/pause, speed control, boomerang mode and keyboard controls. Share links open the book at the page you're on (`#m=…&p=42`). A "View at the library" link goes to the book's page at its institution when the manifest names one.
+- **Flipbook viewer.** Scrubbing, play/pause, speed control, boomerang mode and keyboard controls. Share links open the book at the page you're on (`#m=…&p=42`). The viewer also links to the item page and the manifest.
 - **Exports.** GIF, video (WebM or MP4, whichever the browser can record) or a contact-sheet JPEG. Choose frames, width, speed and pages (no blanks, plates only, or all). A credit line with the title and institution is added by default. GIFs are encoded in the browser with [gifenc](https://github.com/mattdesl/gifenc), vendored in `vendor/`.
 - **Flash mode.** Every card cycles its pages at once, like the old IA search results.
 - Right-to-left books scrub in the right direction. Light and dark themes follow the OS setting.

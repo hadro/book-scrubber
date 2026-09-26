@@ -393,6 +393,9 @@ select {
   overflow: hidden;
 }
 .card-note { margin: 3px 0 0; font-size: 13px; color: var(--ink-soft); }
+.card-links { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 5px 0 0; font: 700 12px var(--mono); }
+.card-links a { color: var(--ink-soft); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.card-links a:hover { color: var(--ink); }
 
 .card-remove {
   position: absolute;

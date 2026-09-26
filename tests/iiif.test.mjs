@@ -11,6 +11,7 @@ import {
   contentStateManifest,
   collectionMembers,
   isCollection,
+  itemPageFromUrl,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -191,4 +192,22 @@ test("homepage comes from v3 homepage or v2 related", () => {
   const v2 = v2Manifest(1);
   v2.related = "https://lib.example/item/2";
   assert.equal(parseManifest(v2).homepage, "https://lib.example/item/2");
+});
+
+test("item pages are derived from manifest and catalog URLs", () => {
+  assert.equal(itemPageFromUrl("https://iiif.archive.org/iiif/3/b33498854/manifest.json"), "https://archive.org/details/b33498854");
+  assert.equal(itemPageFromUrl("https://www.loc.gov/item/03032405/manifest.json"), "https://www.loc.gov/item/03032405/");
+  assert.equal(
+    itemPageFromUrl("https://api-collections.nypl.org/manifests/dce441f0-83d3-0132-efca-58d385a7b928"),
+    "https://digitalcollections.nypl.org/items/dce441f0-83d3-0132-efca-58d385a7b928"
+  );
+  assert.equal(itemPageFromUrl("https://www.e-codices.unifr.ch/metadata/iiif/csg-0040/manifest.json"), "https://www.e-codices.unifr.ch/en/list/one/csg/0040");
+  assert.equal(
+    itemPageFromUrl("https://libraryimage.nga.gov/manifest/mms/99826713504896.json"),
+    "https://library.nga.gov/discovery/fulldisplay?vid=01NGA_INST:NGA&docid=alma99826713504896"
+  );
+  assert.equal(itemPageFromUrl("https://archive.org/details/foo"), "https://archive.org/details/foo");
+  assert.equal(itemPageFromUrl("kunstformenderna00haec"), "https://archive.org/details/kunstformenderna00haec");
+  assert.equal(itemPageFromUrl("https://media.getty.edu/iiif/manifest/3/ad56409c"), null);
+  assert.equal(itemPageFromUrl("https://example.org/iiif/book/manifest.json"), null);
 });

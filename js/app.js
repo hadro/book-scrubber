@@ -1,6 +1,7 @@
 import {
   resolveInput,
   inputHint,
+  itemPageFromUrl,
   isCollection,
   collectionMembers,
   fetchFirstManifest,
@@ -306,8 +307,9 @@ const slug = (s) =>
 let BAKED = {};
 
 class Book {
-  constructor({ input, title, note, source, removable = false }) {
+  constructor({ input, title, note, source, page, removable = false }) {
     this.input = input;
+    this.page = page || null;
     this.title = title || "";
     this.note = note || "";
     this.source = source || guessSource(resolveInput(input)[0] || "");
@@ -321,6 +323,17 @@ class Book {
   get total() {
     return this.data ? this.data.pages.length : this.baked ? this.baked.total : 0;
   }
+  /** The item's web page at its institution: set explicitly, named in the manifest, or derived from the URL. */
+  get itemPage() {
+    return (
+      this.page ||
+      (this.data && this.data.homepage) ||
+      (this.baked && this.baked.homepage) ||
+      itemPageFromUrl(this.input) ||
+      itemPageFromUrl(this.manifestUrl)
+    );
+  }
+
   get rtl() {
     return this.data ? this.data.rtl : !!(this.baked && this.baked.rtl);
   }
@@ -415,6 +428,12 @@ class Card {
     const pages = n ? `${n} ${n === 1 ? "image" : "pages"}` : "";
     $(".card-note", this.el).textContent = [this.book.note, pages].filter(Boolean).join(" · ");
     this.cover.setAttribute("aria-label", `${this.book.title || "Book"}: open flipbook`);
+    const page = $(".card-link-page", this.el);
+    page.hidden = !this.book.itemPage;
+    if (!page.hidden) page.href = this.book.itemPage;
+    $(".card-link-iiif", this.el).href = this.book.manifestUrl;
+    const where = (SOURCES[this.book.source] || {}).name;
+    page.title = where && this.book.source !== "mine" ? `View at ${where}` : "View the item's page";
   }
 
   init() {
@@ -914,12 +933,6 @@ function setFrames(pages, keepPage) {
 /** "#m=<book>" plus "&p=<page>" (1-based) when a page is given. */
 const shareHash = (book, page) => `#m=${encodeURIComponent(book.input)}${page != null ? `&p=${page + 1}` : ""}`;
 
-/** A human-facing page for the book: the manifest's homepage, or the catalog page that was pasted. */
-function homepageFor(book) {
-  if (book.data && book.data.homepage) return book.data.homepage;
-  return /^https?:\/\//.test(book.input) && !/manifest|\/iiif\//i.test(book.input) ? book.input : null;
-}
-
 async function openViewer(book, { page = null } = {}) {
   if (!viewer.open) V.opener = document.activeElement;
   V.startPage = page;
@@ -948,8 +961,8 @@ async function openViewer(book, { page = null } = {}) {
   if (!viewer.open) viewer.showModal();
   history.replaceState(null, "", shareHash(book, page));
   const home = $("#viewer-home");
-  home.hidden = !homepageFor(book);
-  if (!home.hidden) home.href = homepageFor(book);
+  home.hidden = !book.itemPage;
+  if (!home.hidden) home.href = book.itemPage;
 
   // Show the baked preview straight away while the manifest loads.
   if (book.baked) {
@@ -981,8 +994,8 @@ async function openViewer(book, { page = null } = {}) {
   V.live = true;
   $("#viewer-title").textContent = book.title;
   $("#viewer-manifest").href = book.manifestUrl;
-  home.hidden = !homepageFor(book);
-  if (!home.hidden) home.href = homepageFor(book);
+  home.hidden = !book.itemPage;
+  if (!home.hidden) home.href = book.itemPage;
   const overview = sampleIndices(d.pages.length, OVERVIEW_FRAMES);
   // A shared link's page wins, unless the visitor already moved.
   const start = V.startPage != null && V.startPage < d.pages.length ? V.startPage : null;

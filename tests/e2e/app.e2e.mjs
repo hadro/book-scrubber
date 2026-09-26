@@ -70,6 +70,25 @@ test("shelf: hover scrubbing moves through the book", async () => {
   await ctx.close();
 });
 
+test("cards link to the IIIF manifest and, when known, the item page", async () => {
+  const { ctx, page } = await openApp({ shelf: ["home", "plain"] });
+  await page.waitForFunction(() => document.querySelectorAll(".card .card-note").length === 2 && [...document.querySelectorAll(".card-note")].every((n) => /pages/.test(n.textContent)));
+  const links = await page.$$eval(".card", (cards) =>
+    cards.map((c) => ({
+      title: c.querySelector(".card-title").textContent,
+      page: c.querySelector(".card-link-page").hidden ? null : c.querySelector(".card-link-page").href,
+      iiif: c.querySelector(".card-link-iiif").href,
+    }))
+  );
+  const home = links.find((l) => l.title === "Book home");
+  const plain = links.find((l) => l.title === "Book plain");
+  assert.equal(home.page, "https://library.example/items/home");
+  assert.equal(home.iiif, iiif.manifest("home"));
+  assert.equal(plain.page, null, "no item page is invented for an unknown server");
+  assert.equal(plain.iiif, iiif.manifest("plain"));
+  await ctx.close();
+});
+
 test("politeness: fly-bys cost nothing, brief hovers little, repeats nothing", async () => {
   const { ctx, page } = await openApp({ shelf: ["plain", "oz", "mixed"] });
   await sleep(500);
