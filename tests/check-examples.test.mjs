@@ -10,23 +10,37 @@ const fakeFetch = ({ cors = true, imageStatus = 200 } = {}) => async (url) => {
 };
 
 test("healthy example", async () => {
-  const row = await checkExample({ title: "Good", input: "https://example.org/good/manifest.json" }, { fetchImpl: fakeFetch() });
+  const row = await checkExample({ title: "Good", input: "https://example.org/good/manifest.json" }, { fetchImpl: fakeFetch(), retryDelay: 0 });
   assert.equal(row.ok, true);
   assert.equal(row.pages, "12 (v3)");
   assert.equal(row.cors, "yes");
 });
 
 test("image server without CORS still counts as working, but is flagged", async () => {
-  const row = await checkExample({ title: "NoCors", input: "https://example.org/n/manifest.json" }, { fetchImpl: fakeFetch({ cors: false }) });
+  const row = await checkExample({ title: "NoCors", input: "https://example.org/n/manifest.json" }, { fetchImpl: fakeFetch({ cors: false }), retryDelay: 0 });
   assert.equal(row.ok, true);
   assert.match(row.cors, /^no/);
 });
 
 test("broken manifest and broken image are failures", async () => {
-  const a = await checkExample({ title: "Missing", input: "https://example.org/missing/manifest.json" }, { fetchImpl: fakeFetch() });
+  const a = await checkExample({ title: "Missing", input: "https://example.org/missing/manifest.json" }, { fetchImpl: fakeFetch(), retryDelay: 0 });
   assert.equal(a.ok, false);
   assert.equal(a.manifest, "HTTP 404");
-  const b = await checkExample({ title: "BadImg", input: "https://example.org/b/manifest.json" }, { fetchImpl: fakeFetch({ imageStatus: 500 }) });
+  const b = await checkExample({ title: "BadImg", input: "https://example.org/b/manifest.json" }, { fetchImpl: fakeFetch({ imageStatus: 500 }), retryDelay: 0 });
   assert.equal(b.ok, false);
   assert.match(toMarkdown([a, b]), /2 of 2 examples are broken/);
+});
+
+test("a server error gets one retry before counting as broken", async () => {
+  let calls = 0;
+  const flaky = async (url) => {
+    if (url.endsWith("manifest.json")) return Response.json(v3Manifest(3, { base: "https://img.example.org/b" }));
+    calls++;
+    return calls === 1
+      ? new Response("busy", { status: 504 })
+      : new Response("x", { headers: { "content-type": "image/jpeg", "access-control-allow-origin": "*" } });
+  };
+  const row = await checkExample({ title: "Flaky", input: "https://example.org/f/manifest.json" }, { fetchImpl: flaky, retryDelay: 0 });
+  assert.equal(row.ok, true);
+  assert.match(row.image, /after a retry/);
 });

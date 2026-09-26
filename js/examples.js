@@ -84,9 +84,9 @@ export const EXAMPLES = [
     input: "https://archive.org/details/b33498854",
   },
   {
-    // Title comes from the manifest.
     source: "nga",
-    note: "National Gallery of Art Library",
+    title: "An Essay on Light and Shade, on Colours",
+    note: "Mary Gartside, 1805",
     input:
       "https://library.nga.gov/discovery/fulldisplay?context=L&vid=01NGA_INST:NGA&search_scope=MainLibrary&tab=MainLibrary&lang=en&docid=alma99826713504896",
   },
@@ -98,9 +98,9 @@ export const EXAMPLES = [
  //   page: "https://www.getty.edu/art/collection/object/104GAQ",
  // },
   {
-    // Title comes from the manifest.
     source: "getty",
-    note: "Getty Museum album",
+    title: "Egypt and Palestine",
+    note: "Francis Frith, 1858–60",
     input: "https://media.getty.edu/iiif/manifest/3/01b5ac79-78d9-4900-a51b-5ba13c19b6de",
   },
   //{
@@ -110,9 +110,9 @@ export const EXAMPLES = [
   //  input: "https://archive.org/details/carroll-lewis-alices-adventures-in-wonderland-illustrated-by-tenniel-john.-v-1.0",
   //},
   {
-    // Title comes from the manifest.
     source: "getty",
-    note: "Getty Museum album",
+    title: "The Keramic Gallery",
+    note: "600 illustrations of pottery & porcelain",
     input: "https://media.getty.edu/iiif/manifest/3/d4ce5921-731f-4347-945a-bafd815da340",
   },
   {

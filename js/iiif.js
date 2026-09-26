@@ -184,12 +184,15 @@ export async function fetchFirstManifest(candidates, { signal } = {}) {
   const errors = [];
   for (const url of candidates) {
     try {
-      const res = await fetch(url, { signal, headers: { Accept: "application/ld+json, application/json" } });
+      // Give up on a manifest after 30 s rather than leaving a card loading forever.
+      const timeout = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
+      const res = await fetch(url, { signal: signal || timeout, headers: { Accept: "application/ld+json, application/json" } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return { url, json };
     } catch (err) {
       if (err.name === "AbortError") throw err;
+      if (err.name === "TimeoutError") err.message = "The server took too long to answer (30 s).";
       errors.push(`${url}: ${err.message}`);
     }
   }
