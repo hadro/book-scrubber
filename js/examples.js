@@ -116,13 +116,13 @@ export const EXAMPLES = [
     input:
       "https://library.nga.gov/discovery/fulldisplay?context=L&vid=01NGA_INST:NGA&search_scope=MainLibrary&tab=MainLibrary&lang=en&docid=alma99826713504896",
   },
- {
-   source: "getty",
-   title: "Japanese Album",
-   note: "Kusakabe Kimbei, 1870s–1890s",
-   input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
-   page: "https://www.getty.edu/art/collection/object/104GAQ",
- },
+//  {
+//    source: "getty",
+//    title: "Japanese Album",
+//    note: "Kusakabe Kimbei, 1870s–1890s",
+//    input: "https://media.getty.edu/iiif/manifest/3/ad56409c-f51e-4c33-a49b-0d49234a32b6",
+//    page: "https://www.getty.edu/art/collection/object/104GAQ",
+//  },
   {
     source: "getty",
     title: "Egypt and Palestine",
