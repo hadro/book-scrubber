@@ -6,7 +6,7 @@ It's a small homage to the animated book thumbnails that used to flicker through
 
 ## Features
 
-- **Links to the source.** Every card links to its IIIF manifest and, when known, the item's page at its institution. The item page comes from, in order: a `page` set in `js/examples.js`, the manifest's `homepage` (v3) or `related` (v2), or the URL itself for IA, LoC, NYPL, e-codices and NGA. The viewer shows the same links.
+- **Links to the source.** Every card links to its IIIF manifest and, when known, the item's page at its institution. The item page comes from, in order: a `page` set in `js/examples.js`, the manifest's `homepage` (v3) or `related` (v2), or the URL itself for IA, LoC, NYPL, e-codices, NGA and Yale. The viewer shows the same links.
 - **Hover-scrubber cards.** Mouse position maps to a page. Pages load "coarse first" (ends, then middle, then quarters, and so on), so you can scrub the whole book almost at once. On phones, drag a finger sideways across a card.
 - **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (brightness spread, colour and dark areas at 48×48 px) and labelled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
 - **Paste your own, or drag it in.** Accepts a IIIF Presentation v2 or v3 manifest or **collection** (its first 36 books go on the shelf), or a page URL from:

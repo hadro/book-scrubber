@@ -208,6 +208,11 @@ test("item pages are derived from manifest and catalog URLs", () => {
     "https://library.nga.gov/discovery/fulldisplay?vid=01NGA_INST:NGA&docid=alma99826713504896"
   );
   assert.equal(itemPageFromUrl("https://archive.org/details/foo"), "https://archive.org/details/foo");
+  assert.equal(itemPageFromUrl("https://collections.library.yale.edu/manifests/2002046"), "https://collections.library.yale.edu/catalog/2002046");
+  // The link as pasted from Yale's viewer resolves to the same manifest.
+  assert.deepEqual(resolveInput("https://collections.library.yale.edu/manifests/2002046?manifest=https://collections.library.yale.edu/manifests/2002046"), [
+    "https://collections.library.yale.edu/manifests/2002046",
+  ]);
   assert.equal(itemPageFromUrl("kunstformenderna00haec"), "https://archive.org/details/kunstformenderna00haec");
   assert.equal(itemPageFromUrl("https://media.getty.edu/iiif/manifest/3/ad56409c"), null);
   assert.equal(itemPageFromUrl("https://example.org/iiif/book/manifest.json"), null);

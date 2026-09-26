@@ -154,6 +154,9 @@ export function itemPageFromUrl(raw) {
   if (host === "libraryimage.nga.gov" && (m = path.match(/^\/manifest\/mms\/(\d+)\.json$/))) {
     return `https://library.nga.gov/discovery/fulldisplay?vid=01NGA_INST:NGA&docid=alma${m[1]}`;
   }
+  if (host === "collections.library.yale.edu" && (m = path.match(/^\/manifests\/(\d+)/))) {
+    return `https://collections.library.yale.edu/catalog/${m[1]}`;
+  }
   // Not a manifest-looking address: it's probably the item page itself.
   if (!/manifest|\/iiif\/|\.json$/i.test(path + url.search)) return url.toString();
   return null;

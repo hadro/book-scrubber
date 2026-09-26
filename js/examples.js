@@ -12,6 +12,7 @@ export const SOURCES = {
   ecod: { name: "e-codices", short: "e-cod", color: "var(--c-ecod)" },
   nga: { name: "National Gallery of Art Library", short: "NGA", color: "var(--c-nga)" },
   getty: { name: "Getty Museum", short: "Getty", color: "var(--c-getty)" },
+  yale: { name: "Yale University Library", short: "Yale", color: "var(--c-yale)" },
   mine: { name: "Your pick", short: "yours", color: "var(--c-mine)" },
 };
 
@@ -33,6 +34,16 @@ export const EXAMPLES = [
     source: "loc",
     note: "Library of Congress",
     input: "https://www.loc.gov/item/73644404/",
+  },
+  {
+    // The Florentine Codex via the Library of Congress (formerly World Digital
+    // Library). The Getty's Digital Florentine Codex site has no public
+    // manifests; the whole codex is loc.gov/item/2021667837/, and each of its
+    // twelve Books also has its own record.
+    source: "loc",
+    title: "Florentine Codex, Book XII: The Conquest of Mexico",
+    note: "Sahagún, 1577",
+    input: "https://www.loc.gov/item/2021667857/",
   },
   //{
   //  source: "nypl",
@@ -105,6 +116,12 @@ export const EXAMPLES = [
     input: "https://media.getty.edu/iiif/manifest/3/d4ce5921-731f-4347-945a-bafd815da340",
   },
   {
+    source: "yale",
+    title: "Voynich manuscript",
+    note: "Beinecke MS 408 · 15th century",
+    input: "https://collections.library.yale.edu/manifests/2002046",
+  },
+  {
     source: "ecod",
     title: "St. Gallen, Cod. Sang. 40",
     note: "Medieval manuscript",
@@ -123,6 +140,7 @@ export function guessSource(url) {
     if (host.endsWith("e-codices.unifr.ch")) return "ecod";
     if (host.endsWith("nga.gov")) return "nga";
     if (host.endsWith("getty.edu")) return "getty";
+    if (host.endsWith("yale.edu")) return "yale";
   } catch {}
   return "mine";
 }
