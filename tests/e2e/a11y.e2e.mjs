@@ -35,6 +35,8 @@ async function openApp({ scheme = "light", width = 1280, height = 900 } = {}) {
   await ctx.addInitScript((s) => localStorage.setItem("flipbook:shelf", JSON.stringify(s)), inputs);
   const page = await ctx.newPage();
   await page.goto(`${app.origin}/?examples=0`);
+  // Covers only load near the viewport, which on a phone is below the masthead.
+  await page.locator(".card").first().scrollIntoViewIfNeeded();
   await page.waitForSelector(".card .card-img.is-ready");
   // The broken book's card only loads once it's near the viewport.
   await page.locator(".card").nth(2).scrollIntoViewIfNeeded();
@@ -97,11 +99,12 @@ test("axe: phone width (320px) shelf and viewer, no sideways scrolling (reflow)"
   assert.deepEqual(problems, [], "\n" + problems.join("\n"));
 });
 
-test("target size: interactive elements are at least 24×24 px or spaced as WCAG 2.5.8 allows", async () => {
-  const { ctx, page } = await openApp();
-  await openViewer(page);
-  const small = await page.evaluate(() => {
-    const els = [...document.querySelectorAll("button, a[href], input, select, [tabindex]:not([tabindex='-1'])")].filter((e) => e.getClientRects().length && getComputedStyle(e).visibility !== "hidden");
+/** Targets smaller than 24×24 px that also crowd a neighbour (WCAG 2.5.8). */
+const smallTargets = (page) =>
+  page.evaluate(() => {
+    // With a modal open, the page behind it is inert, so only the dialog's targets count.
+    const scope = document.querySelector("dialog[open]") || document;
+    const els = [...scope.querySelectorAll("button, a[href], input, select, [tabindex]:not([tabindex='-1'])")].filter((e) => e.getClientRects().length && getComputedStyle(e).visibility !== "hidden");
     const rects = els.map((e) => {
       // A checkbox/radio inside a label is operated through the whole label.
       const target = e.matches("input[type=checkbox]") && e.closest("label") ? e.closest("label") : e;
@@ -118,6 +121,12 @@ test("target size: interactive elements are at least 24×24 px or spaced as WCAG
     }
     return out;
   });
+
+test("target size: interactive elements are at least 24×24 px or spaced as WCAG 2.5.8 allows", async () => {
+  const { ctx, page } = await openApp();
+  const small = (await smallTargets(page)).map((t) => `shelf: ${t}`);
+  await openViewer(page);
+  small.push(...(await smallTargets(page)).map((t) => `viewer: ${t}`));
   await ctx.close();
   assert.deepEqual(small, []);
 });
