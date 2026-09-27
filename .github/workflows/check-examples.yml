@@ -2,6 +2,7 @@ name: Check example shelf
 
 # Weekly check that every example's manifest and images still load, and which
 # ones support GIFs (CORS). A failing run means an example needs replacing.
+# Examples that refuse GitHub's servers (HTTP 403) show as warnings instead.
 on:
   schedule:
     - cron: "17 9 * * 1" # Mondays, 09:17 UTC

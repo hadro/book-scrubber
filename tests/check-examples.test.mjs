@@ -44,3 +44,17 @@ test("a server error gets one retry before counting as broken", async () => {
   assert.equal(row.ok, true);
   assert.match(row.image, /after a retry/);
 });
+
+test("a 403 is a warning (blocked from CI), not a failure", async () => {
+  const refuse = async () => new Response("no", { status: 403 });
+  const row = await checkExample({ title: "LoC", input: "https://example.org/loc/manifest.json" }, { fetchImpl: refuse, retryDelay: 0 });
+  assert.equal(row.ok, false);
+  assert.equal(row.blocked, true);
+  const md = toMarkdown([row]);
+  assert.match(md, /No examples are broken/);
+  assert.match(md, /⚠️ 1 refused the check with HTTP 403/);
+  assert.match(md, /\| ⚠️ \| LoC \|/);
+  const missing = await checkExample({ title: "Missing", input: "https://example.org/missing/manifest.json" }, { fetchImpl: fakeFetch(), retryDelay: 0 });
+  assert.equal(missing.blocked, false);
+  assert.match(toMarkdown([row, missing]), /\*\*1 of 2 examples are broken\.\*\*/);
+});

@@ -3,6 +3,9 @@
 // fetched, and will the browser features work (CORS for GIFs, ready-made
 // thumbnails/sizes for politeness)? Writes a Markdown table to the GitHub
 // Actions job summary when run there, and exits non-zero if anything is broken.
+// A 403 is reported as a warning rather than a failure: some libraries (the
+// Library of Congress, for one) refuse data-centre IPs like GitHub's runners
+// while working fine for visitors' browsers.
 //
 //   node scripts/check-examples.mjs
 
@@ -27,7 +30,7 @@ async function timed(fetchImpl, url, headers, { retryDelay = 5000 } = {}) {
 }
 
 function describeStatus(status) {
-  if (status === 403) return "HTTP 403 (refused; may be bot protection, so check it in a browser)";
+  if (status === 403) return "HTTP 403 (refused; probably blocking GitHub's servers, so check it in a browser)";
   if (status === 504 || status === 502 || status === 503) return `HTTP ${status} (server timed out, even after a retry)`;
   return `HTTP ${status}`;
 }
@@ -41,6 +44,7 @@ export async function checkExample(ex, { fetchImpl = fetch, retryDelay = 5000 } 
     try {
       row.manifestUrl = candidate;
       const { res, ms, retried } = await timed(fetchImpl, candidate, headers, { retryDelay });
+      row.blocked = res.status === 403;
       if (!res.ok) {
         row.manifest = describeStatus(res.status);
         continue;
@@ -50,6 +54,7 @@ export async function checkExample(ex, { fetchImpl = fetch, retryDelay = 5000 } 
       row.manifest = `ok (${ms} ms${retried ? ", after a retry" : ""})`;
       break;
     } catch (err) {
+      row.blocked = false;
       row.manifest = String(err.message || err).slice(0, 60);
     }
   }
@@ -78,6 +83,7 @@ export async function checkExample(ex, { fetchImpl = fetch, retryDelay = 5000 } 
     row.sample = img;
     const { res, ms, retried } = await timed(fetchImpl, img, { "User-Agent": USER_AGENT, Origin: SITE_ORIGIN }, { retryDelay });
     const type = res.headers.get("content-type") || "?";
+    row.blocked = res.status === 403;
     if (!res.ok || !/^image\//.test(type)) {
       row.image = res.ok ? `not an image (${type})` : describeStatus(res.status);
       return row;
@@ -97,11 +103,16 @@ export function toMarkdown(rows) {
   const lines = [
     "| | Example | Manifest | Pages | Image | CORS | Thumbnails/sizes |",
     "|---|---|---|---|---|---|---|",
-    ...rows.map((r) => `| ${r.ok ? "✅" : "❌"} | ${r.title} | ${r.manifest} | ${r.pages} | ${r.image} | ${r.cors} | ${r.extras} |`),
+    ...rows.map((r) => `| ${r.ok ? "✅" : r.blocked ? "⚠️" : "❌"} | ${r.title} | ${r.manifest} | ${r.pages} | ${r.image} | ${r.cors} | ${r.extras} |`),
   ];
-  const bad = rows.filter((r) => !r.ok).length;
+  const bad = rows.filter((r) => !r.ok && !r.blocked).length;
+  const blocked = rows.filter((r) => !r.ok && r.blocked).length;
+  const summary = [
+    bad ? `**${bad} of ${rows.length} examples are broken.**` : blocked ? `No examples are broken.` : `All ${rows.length} examples work.`,
+    blocked ? `⚠️ ${blocked} refused the check with HTTP 403, which usually means the library blocks GitHub's servers rather than the item being gone. Check ${blocked === 1 ? "it" : "them"} in a browser.` : "",
+  ].filter(Boolean).join(" ");
   const samples = rows.filter((r) => r.manifestUrl).map((r) => `- ${r.title}: ${r.manifestUrl}${r.sample ? ` → ${r.sample}` : ""}`);
-  return `## Example shelf health\n\n${bad ? `**${bad} of ${rows.length} examples are broken.**` : `All ${rows.length} examples work.`}\n\n${lines.join("\n")}\n\n<details><summary>Manifest and sample image URLs</summary>\n\n${samples.join("\n")}\n</details>\n`;
+  return `## Example shelf health\n\n${summary}\n\n${lines.join("\n")}\n\n<details><summary>Manifest and sample image URLs</summary>\n\n${samples.join("\n")}\n</details>\n`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -110,5 +121,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const md = toMarkdown(rows);
   console.log(md);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, md);
-  process.exitCode = rows.every((r) => r.ok) ? 0 : 1;
+  process.exitCode = rows.every((r) => r.ok || r.blocked) ? 0 : 1;
 }
