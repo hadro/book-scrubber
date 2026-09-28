@@ -84,7 +84,7 @@ So the homepage doesn't send every visitor's hovering to the libraries, the exam
 - **On GitHub:** Actions tab → "Bake example shelf" → Run workflow. It runs the tests, bakes anything not yet (fully) baked, and commits the results to the branch you ran it on. Tick "force" to re-bake everything.
 - **Locally:** `node scripts/bake-examples.mjs` (add `--force` to re-bake). Useful for libraries that block GitHub's servers, such as the Library of Congress.
 
-The baker sends one request at a time with a pause between them and identifies itself with a descriptive User-Agent. A request with no response after 30 seconds is abandoned and retried (up to 3 tries), so one hung image can't stall a bake; the health check does the same with one retry.
+The baker sends one request at a time with a pause between them and identifies itself with a descriptive User-Agent. A request with no response after 30 seconds is abandoned and retried (up to 3 tries), so one hung image can't stall a bake; the health check does the same with one retry. The baker's retries alternate between the 300px URL and the same image at 301px. The Internet Archive's server sometimes gets stuck on one URL while a slightly different one comes straight back, and once 301px works for a book, its remaining pages try 301px first.
 
 A page image that still won't load is skipped. If a book gets at least half of its 24 frames, it's saved and marked `partial` in `baked/index.json`, and the next run downloads only the missing frames. Each book is baked into a temporary folder that replaces the old one only when the bake succeeds, so a failed re-bake (even with `--force`) keeps whatever was baked before.
 
