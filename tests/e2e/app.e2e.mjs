@@ -28,8 +28,9 @@ after(async () => {
 });
 
 /** A fresh browser context whose shelf holds the given fake books. */
-async function openApp({ shelf = [], hash = "", origin = app.origin, context = {}, blockSW = true, waitReady = true } = {}) {
+async function openApp({ shelf = [], hash = "", origin = app.origin, context = {}, blockSW = true, waitReady = true, stallMs } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: blockSW ? "block" : "allow", ...context });
+  if (stallMs) await ctx.addInitScript((ms) => (window.FLIPBOOK_STALL_MS = ms), stallMs);
   await ctx.addInitScript((inputs) => {
     if (!sessionStorage.getItem("seeded")) {
       sessionStorage.setItem("seeded", "1");
@@ -447,5 +448,24 @@ test("baked shelf: hovering and flash mode cost the image server nothing", async
   await page.check("#flash-toggle", { force: true });
   await sleep(1500);
   assert.equal(iiif.stats().images, 0);
+  await ctx.close();
+});
+
+test("a hung image request is abandoned and retried, so it can't block the server's queue", async () => {
+  iiif.reset();
+  const t0 = Date.now();
+  const { ctx, page, errors } = await openApp({ shelf: ["stall"], stallMs: 500, waitReady: false });
+  await page.waitForSelector(".card .card-img.is-ready", { timeout: 8000 });
+  assert.ok(Date.now() - t0 < 8000);
+  // The cover was asked for twice: the hung attempt, then the retry that worked.
+  const coverHits = Object.entries(iiif.stats().urls).filter(([u]) => /\/stall\/p0\//.test(u));
+  assert.deepEqual(coverHits.map(([, n]) => n), [2]);
+  // Hovering still loads the rest of the book despite every first request
+  // hanging (stalled requests retry after the rest of the queue).
+  await hover(page, 0, 7000);
+  const loaded = await page.locator(".card .ticks i.is-loaded").count();
+  assert.ok(loaded >= 4, `frames loaded after stalls: ${loaded}`);
+  assert.equal(await page.locator(".card-error:not([hidden])").count(), 0);
+  assert.deepEqual(errors, []);
   await ctx.close();
 });

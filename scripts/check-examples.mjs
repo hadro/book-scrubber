@@ -19,12 +19,22 @@ const SITE_ORIGIN = "https://hadro.github.io";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Fetch with one retry after a pause on 5xx/429 (IIIF servers often time out on a first, uncached request). */
-async function timed(fetchImpl, url, headers, { retryDelay = 5000 } = {}) {
+/**
+ * Fetch with one retry after a pause on 5xx/429 or no response within
+ * `timeoutMs` (IIIF servers often time out on a first, uncached request, and
+ * some leave the odd request hanging for minutes).
+ */
+async function timed(fetchImpl, url, headers, { retryDelay = 5000, timeoutMs = 30000 } = {}) {
   for (let attempt = 1; ; attempt++) {
     const t0 = Date.now();
-    const res = await fetchImpl(url, { headers });
-    if (attempt >= 2 || !(res.status >= 500 || res.status === 429)) return { res, ms: Date.now() - t0, retried: attempt > 1 };
+    let res;
+    try {
+      res = await fetchImpl(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err) {
+      if (err.name !== "TimeoutError") throw err;
+      if (attempt >= 2) throw new Error(`no response after ${timeoutMs / 1000} s, even after a retry`);
+    }
+    if (res && (attempt >= 2 || !(res.status >= 500 || res.status === 429))) return { res, ms: Date.now() - t0, retried: attempt > 1 };
     await sleep(retryDelay);
   }
 }
@@ -36,14 +46,14 @@ function describeStatus(status) {
 }
 
 /** Check one example. Never throws; returns a row of findings. */
-export async function checkExample(ex, { fetchImpl = fetch, retryDelay = 5000 } = {}) {
+export async function checkExample(ex, { fetchImpl = fetch, retryDelay = 5000, timeoutMs = 30000 } = {}) {
   const row = { title: ex.title || ex.input, ok: false, manifest: "", pages: "", image: "", cors: "", extras: "" };
   const headers = { "User-Agent": USER_AGENT, Accept: "application/ld+json, application/json" };
   let json, url;
   for (const candidate of resolveInput(ex.input)) {
     try {
       row.manifestUrl = candidate;
-      const { res, ms, retried } = await timed(fetchImpl, candidate, headers, { retryDelay });
+      const { res, ms, retried } = await timed(fetchImpl, candidate, headers, { retryDelay, timeoutMs });
       row.blocked = res.status === 403;
       if (!res.ok) {
         row.manifest = describeStatus(res.status);
@@ -81,7 +91,7 @@ export async function checkExample(ex, { fetchImpl = fetch, retryDelay = 5000 } 
   const img = pageImageUrl(m.pages[Math.min(1, m.pages.length - 1)], SMALL);
   try {
     row.sample = img;
-    const { res, ms, retried } = await timed(fetchImpl, img, { "User-Agent": USER_AGENT, Origin: SITE_ORIGIN }, { retryDelay });
+    const { res, ms, retried } = await timed(fetchImpl, img, { "User-Agent": USER_AGENT, Origin: SITE_ORIGIN }, { retryDelay, timeoutMs });
     const type = res.headers.get("content-type") || "?";
     row.blocked = res.status === 403;
     if (!res.ok || !/^image\//.test(type)) {
@@ -93,7 +103,7 @@ export async function checkExample(ex, { fetchImpl = fetch, retryDelay = 5000 } 
     row.cors = acao === "*" || acao === SITE_ORIGIN ? "yes" : "no (GIFs won't work)";
     row.ok = true;
   } catch (err) {
-    row.image = String(err.message || err).slice(0, 60);
+    row.image = String(err.message || err).slice(0, 80);
   }
   row.manifestUrl = url;
   return row;

@@ -157,6 +157,14 @@ a { color: inherit; }
   color: var(--ink-soft);
 }
 
+.backstory {
+  margin: 10px auto 0;
+  max-width: 660px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+.backstory a { color: var(--ink); font-weight: 700; text-underline-offset: 3px; }
+
 /* ---------- Buttons & fields ---------- */
 
 .btn {
