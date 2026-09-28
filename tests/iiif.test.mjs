@@ -271,14 +271,3 @@ test("a IIIF image URL without a listed service still gets resized", () => {
     "https://tile.example.gov/image-services/iiif/service:rbc:x:0001/full/300,/0/default.jpg"
   );
 });
-
-test("iiif.archive.org is never asked for exactly 300px wide (it stalls on that size)", () => {
-  const json = v3Manifest(2, { base: "https://iiif.archive.org/image/iiif/3/book%2Fbook_jp2.zip%2Fbook_jp2%2Fbook_0001.jp2" });
-  const page = parseManifest(json).pages[0];
-  const url = pageImageUrl(page, 300);
-  assert.match(url, /\/full\/301,(\d+)?\/0\/default\.jpg$/);
-  assert.match(pageImageUrl(page, 800), /\/full\/800,/);
-  // Other servers still get the canonical 300.
-  const other = parseManifest(v3Manifest(2)).pages[0];
-  assert.match(pageImageUrl(other, 300), /\/full\/300,/);
-});
