@@ -23,6 +23,11 @@ const STAGE_MAX_FRAMES = 150;
 const REEL_MAX = 150; // most frames a shelf card will hold (or one per pixel of card width, if wider)
 const OVERVIEW_FRAMES = 24; // matches the default shelf density, so URLs are shared
 const PER_HOST = 3; // simultaneous image requests per server
+// Some servers (the Internet Archive's, notably) now and then leave a request
+// hanging for a minute or more while an identical one a moment later is quick.
+// Give up on an image after this long, free its slot, and try it once more.
+const STALL_MS = window.FLIPBOOK_STALL_MS || 15000;
+const STALL_RETRIES = 1;
 const HOVER_INTENT_MS = 150; // ignore mouse fly-bys shorter than this
 const KEEP_LOADING_MS = 600; // after a hover this long, finish loading the card even once the mouse leaves
 const MIN_PLATES = 3; // plates-only needs at least this many plates on a card, else it shows all non-blank pages
@@ -86,8 +91,18 @@ function corsAttr(url) {
   return h && h.cors ? "anonymous" : null;
 }
 
+/**
+ * A retry after a stall asks for a slightly different URL: the browser won't
+ * start a second request for a URL whose first request is still hanging (and
+ * setting src = "" doesn't actually cancel it). Remember what loaded instead.
+ */
+const retriedAs = new Map(); // canonical url -> the retry url that loaded
+const srcOf = (url) => retriedAs.get(url) || url;
+const retryUrl = (url, n) => `${url}${url.includes("?") ? "&" : "?"}retry=${n}`;
+
 /** Set an <img>'s src without mismatching the cached copy's CORS mode. */
 function setImg(img, url) {
+  url = srcOf(url);
   if (img.getAttribute("src") === url) return;
   const mode = corsAttr(url);
   if (img.crossOrigin !== mode) img.crossOrigin = mode;
@@ -100,13 +115,20 @@ function concurrencyFor(h) {
   return PER_HOST;
 }
 
+class StallError extends Error {}
+
 function fetchImage(url, cors) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
     if (cors) img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
+    const timer = setTimeout(() => {
+      img.onload = img.onerror = null;
+      img.src = ""; // stop waiting (the request itself may linger)
+      reject(new StallError(`no response after ${STALL_MS} ms`));
+    }, STALL_MS);
+    img.onload = () => (clearTimeout(timer), resolve(img));
+    img.onerror = (e) => (clearTimeout(timer), reject(e));
     img.src = url;
   });
 }
@@ -124,7 +146,9 @@ function pump(h) {
     h.active++;
     const t0 = performance.now();
     const tryCors = h.cors !== false;
-    fetchImage(job.url, tryCors)
+    let requeued = false;
+    const url = job.stalls ? retryUrl(job.url, job.stalls) : job.url;
+    fetchImage(url, tryCors)
       .then((img) => {
         if (tryCors) h.cors = true;
         return img;
@@ -133,8 +157,9 @@ function pump(h) {
         // Unknown server and the CORS attempt failed: maybe it just doesn't
         // send CORS headers. One plain retry settles it for this server
         // (unless it's already failing, when the retry would just add load).
-        if (tryCors && h.cors === undefined && h.failures === 0) {
-          await fetchImage(job.url, false);
+        // A stall says nothing about CORS, so it doesn't count.
+        if (tryCors && h.cors === undefined && h.failures === 0 && !(err instanceof StallError)) {
+          await fetchImage(url, false);
           h.cors = false;
           return null; // loaded, but its pixels can't be read
         }
@@ -150,10 +175,20 @@ function pump(h) {
           h.failures = 0;
           const ms = performance.now() - t0;
           h.latency = h.latency ? h.latency * 0.7 + ms * 0.3 : ms;
+          if (url !== job.url) retriedAs.set(job.url, url);
           loadedUrls.add(job.url);
           job.resolve(job.url);
         },
-        () => {
+        (err) => {
+          // A stalled request usually succeeds when asked again: requeue it
+          // (behind whatever is waiting) if anyone still wants it.
+          const wanted = job.pinned || job.owners > 0;
+          if (err instanceof StallError && wanted && (job.stalls = (job.stalls || 0) + 1) <= STALL_RETRIES) {
+            job.started = false;
+            h.waiting.push(job);
+            requeued = true;
+            return;
+          }
           // Three failures in a row: pause this server, doubling up to a minute.
           h.failures++;
           if (h.failures >= 3) h.pausedUntil = Date.now() + Math.min(60000, 2000 * 2 ** (h.failures - 3));
@@ -162,7 +197,7 @@ function pump(h) {
       )
       .finally(() => {
         h.active--;
-        inflight.delete(job.url);
+        if (!requeued) inflight.delete(job.url);
         pump(h);
       });
   }
@@ -526,8 +561,10 @@ class Card {
     [...this.loaded].forEach((i) => this.ticks.children[i].classList.add("is-loaded"));
     this.refreshTicks();
 
-    const cover = this.loadedUrl(0) || this.reel.cands[0][0];
-    loadImage(cover, { front: true })
+    // Try the cover's other sizes before giving up on the card.
+    const covers = this.loadedUrl(0) ? [this.loadedUrl(0)] : this.reel.cands[0];
+    const loadCover = (k = 0) => loadImage(covers[k], { front: true }).catch((err) => (k + 1 < covers.length ? loadCover(k + 1) : Promise.reject(err)));
+    loadCover()
       .then(() => {
         this.markLoaded(0);
         this.show(0, true);
@@ -1388,7 +1425,7 @@ async function pickPages(n, width, mode, signal, onProgress) {
     if (plates.length >= 2) chosen = plates;
   }
   const picks = sampleIndices(chosen.length, n).map((k) => chosen[k]);
-  return picks.map((c) => (wantBig ? bigUrl(c.page) : c.small));
+  return picks.map((c) => srcOf(wantBig ? bigUrl(c.page) : c.small));
 }
 
 gifBtn.addEventListener("click", async () => {

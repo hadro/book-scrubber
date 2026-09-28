@@ -66,6 +66,7 @@ const BOOKS = {
   nocors: [3, 60, "nocors"],
   broken: [3, 60, "fail"],
   slow: [3, 40, "slow"],
+  stall: [3, 40, "stall"], // first request for each image hangs until the client gives up
   thumbs: [3, 40, "ok"],
   home: [3, 30, "ok"],
 };
@@ -113,6 +114,11 @@ export async function startFakeIiif() {
       stats.active[book] = (stats.active[book] || 0) + 1;
       stats.maxActive[book] = Math.max(stats.maxActive[book] || 0, stats.active[book]);
       stats.timeline.push([Date.now(), book, stats.active[book]]);
+      if (mode === "stall" && stats.urls[u.pathname] === 1) {
+        await new Promise((r) => req.on("close", r));
+        stats.active[book]--;
+        return;
+      }
       await sleep(mode === "slow" ? 2500 : mode === "typical" ? 700 : 120);
       stats.active[book]--;
       if (mode === "fail") return res.writeHead(500, cors).end("nope");
