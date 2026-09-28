@@ -380,15 +380,38 @@ select {
   background: #16130f;
   z-index: 2;
 }
-.ticks i {
+.ticks i, .tick-sample i {
   flex: 1;
   border-radius: 1px;
   background: #3b352c;
   transition: background .2s;
 }
-.ticks i.is-loaded { background: #8d8272; }
-.ticks i.is-current { background: var(--sticker, var(--pink)); }
-.ticks i.is-skipped { background: transparent; box-shadow: inset 0 0 0 1px #3b352c; }
+.ticks i.is-loaded, .tick-sample i.is-loaded { background: #8d8272; }
+.ticks i.is-current, .tick-sample i.is-current { background: var(--sticker, var(--pink)); }
+/* Skipped (blank, or text in plates-only mode): a thin dash, unlike any square. */
+.ticks i.is-skipped, .tick-sample i.is-skipped { background: linear-gradient(#8d8272, #8d8272) center / 100% 2px no-repeat; }
+
+/* Key to the tick strip, under the shelf options. */
+.tick-key {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.tick-key > span { display: inline-flex; align-items: center; gap: 6px; }
+.tick-sample {
+  display: inline-flex;
+  width: 20px;
+  height: 14px;
+  padding: 3px 4px;
+  background: #16130f;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(141, 130, 114, .45); /* visible on the dark theme too */
+}
 
 .card-error {
   position: absolute;
