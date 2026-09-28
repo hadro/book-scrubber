@@ -51,7 +51,7 @@ function announce(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Image loading: per-host queues, shared cache, cancellable while queued
+// Image loading: per-host queues, shared cache, cancelable while queued
 // ---------------------------------------------------------------------------
 
 const loadedUrls = new Set(); // decoded and in the browser cache
@@ -213,7 +213,7 @@ function cancelJob(job) {
   const i = h.waiting.indexOf(job);
   if (i >= 0) h.waiting.splice(i, 1);
   inflight.delete(job.url);
-  job.reject(new DOMException("Cancelled", "AbortError"));
+  job.reject(new DOMException("Canceled", "AbortError"));
 }
 
 /**
@@ -240,7 +240,7 @@ function claim(job, signal) {
 /** Load an image. Resolves with its URL once decoded. */
 function loadImage(url, { front = false, signal } = {}) {
   if (loadedUrls.has(url)) return Promise.resolve(url);
-  if (signal && signal.aborted) return Promise.reject(new DOMException("Cancelled", "AbortError"));
+  if (signal && signal.aborted) return Promise.reject(new DOMException("Canceled", "AbortError"));
   let job = inflight.get(url);
   if (!job) {
     job = { url, host: hostOf(url), owners: 0, pinned: false, started: false };
@@ -575,7 +575,7 @@ class Card {
       .catch(() => this.showError(new Error("The first page image wouldn't load.")));
   }
 
-  /** Fetch the rest of the reel, coarse-first. Cancelled (if still queued) by stopPreload. */
+  /** Fetch the rest of the reel, coarse-first. Canceled (if still queued) by stopPreload. */
   preload() {
     if (this.ctl || !this.reel) return;
     this.ctl = new AbortController();
@@ -1415,7 +1415,7 @@ async function pickPages(n, width, mode, signal, onProgress) {
         .finally(() => onProgress && onProgress(++done, pool.length))
     )
   );
-  if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
+  if (signal.aborted) throw new DOMException("Canceled", "AbortError");
   const kind = (c) => (pageStats.get(c.small) || {}).kind;
   const loaded = pool.filter((c) => loadedUrls.has(c.small));
   const nonBlank = loaded.filter((c) => kind(c) !== "blank");

@@ -21,12 +21,12 @@ test("blank paper (with a little noise) is blank", () => {
 });
 
 test("a page of text blurred to thumbnail size is text", () => {
-  // Text at 48px: faint grey rows with gaps, inside margins.
+  // Text at 48px: faint gray rows with gaps, inside margins.
   const d = page((x, y) => (x > 5 && x < 42 && y > 4 && y < 44 && y % 3 !== 0 ? PAPER.map((c) => c - 45) : null));
   assert.equal(classify(d).kind, "text");
 });
 
-test("a colour plate is a plate", () => {
+test("a color plate is a plate", () => {
   const d = page((x, y) => ((x - 24) ** 2 + (y - 22) ** 2 < 180 ? [40, 110, 170] : x > 30 && y > 30 ? [200, 60, 50] : null));
   assert.equal(classify(d).kind, "plate");
 });
@@ -49,7 +49,7 @@ test("sepia photographs mounted on card are plates (Frith-style albums)", () => 
   assert.equal(classify(P.sepiaPhoto(0.15)).kind, "plate", "faded print");
 });
 
-test("printed text, dark or grey, stays text; a caption-only page is not a plate", () => {
+test("printed text, dark or gray, stays text; a caption-only page is not a plate", () => {
   assert.equal(classify(P.textPage()).kind, "text");
   assert.equal(classify(P.textPage(90)).kind, "text");
   assert.notEqual(classify(P.captionPage()).kind, "plate");

@@ -99,7 +99,7 @@ test("axe: phone width (320px) shelf and viewer, no sideways scrolling (reflow)"
   assert.deepEqual(problems, [], "\n" + problems.join("\n"));
 });
 
-/** Targets smaller than 24×24 px that also crowd a neighbour (WCAG 2.5.8). */
+/** Targets smaller than 24×24 px that also crowd a neighbor (WCAG 2.5.8). */
 const smallTargets = (page) =>
   page.evaluate(() => {
     // With a modal open, the page behind it is inert, so only the dialog's targets count.
@@ -114,7 +114,7 @@ const smallTargets = (page) =>
     for (const { e, r } of rects) {
       if (r.width >= 23.5 && r.height >= 23.5) continue; // allow sub-pixel rounding
       if (e.closest("p, li") && e.matches("a") && getComputedStyle(e).display === "inline") continue; // inline text links are exempt
-      // Spacing exception: a 24px circle centred on the target must not overlap another target.
+      // Spacing exception: a 24px circle centered on the target must not overlap another target.
       const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
       const clash = rects.some((o) => o.e !== e && o.r.width && Math.hypot(Math.max(o.r.x - cx, 0, cx - (o.r.x + o.r.width)), Math.max(o.r.y - cy, 0, cy - (o.r.y + o.r.height))) < 12);
       if (clash) out.push(`${e.tagName.toLowerCase()}${e.id ? "#" + e.id : ""}.${[...e.classList].join(".")} ${Math.round(r.width)}×${Math.round(r.height)}`);

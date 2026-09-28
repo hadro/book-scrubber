@@ -4,7 +4,7 @@
 // thumbnails/sizes for politeness)? Writes a Markdown table to the GitHub
 // Actions job summary when run there, and exits non-zero if anything is broken.
 // A 403 is reported as a warning rather than a failure: some libraries (the
-// Library of Congress, for one) refuse data-centre IPs like GitHub's runners
+// Library of Congress, for one) refuse data-center IPs like GitHub's runners
 // while working fine for visitors' browsers.
 //
 //   node scripts/check-examples.mjs
