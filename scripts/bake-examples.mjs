@@ -4,12 +4,16 @@
 // serves the shelf's hover-scrubbing from these local files, so visitors cost
 // the libraries' image servers nothing until they open a book or paste their own.
 //
-//   node scripts/bake-examples.mjs            # bake anything not yet baked
+//   node scripts/bake-examples.mjs            # bake anything not yet (fully) baked
 //   node scripts/bake-examples.mjs --force    # re-bake everything
 //
-// Requests go one at a time with a pause between them.
+// Requests go one at a time with a pause between them. A page image that
+// won't load is skipped: a book with at least half its frames is saved and
+// marked `partial`, and the next run fetches only the missing frames. Each
+// book is baked into a temporary folder and swapped in only when it
+// succeeds, so a failed re-bake never loses what was there.
 
-import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm, rename, copyFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXAMPLES } from "../js/examples.js";
@@ -63,11 +67,14 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
   const headers = { "User-Agent": USER_AGENT, Accept: "application/ld+json, application/json, image/*" };
 
   for (const ex of examples) {
-    if (!force && index.items[ex.input]) {
+    const prev = index.items[ex.input];
+    if (!force && prev && !prev.partial) {
       log(`skip  ${ex.title || ex.input} (already baked)`);
       continue;
     }
     const slug = slugFor(ex.input);
+    const dir = join(outDir, slug);
+    const tmp = join(outDir, `.${slug}.tmp`);
     try {
       let manifestUrl, json;
       for (const url of resolveInput(ex.input)) {
@@ -86,20 +93,44 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
         json: await (await get(u, { headers })).json(),
       })));
       const m = parseManifest(json);
-      const pages = sampleIndices(m.pages.length, BAKED_FRAMES);
+      const wanted = sampleIndices(m.pages.length, BAKED_FRAMES);
+      const minFrames = Math.ceil(wanted.length / 2);
 
-      const dir = join(outDir, slug);
-      await rm(dir, { recursive: true, force: true });
-      await mkdir(dir, { recursive: true });
+      // Frames a previous partial bake of the same book already has.
+      const have = new Map();
+      if (!force && prev && prev.total === m.pages.length) prev.pages.forEach((p, k) => have.set(p, prev.files[k]));
+
+      await rm(tmp, { recursive: true, force: true });
+      await mkdir(tmp, { recursive: true });
+      const pages = [];
       const files = [];
-      for (let k = 0; k < pages.length; k++) {
-        await sleep(delayMs);
-        const res = await get(pageImageUrl(m.pages[pages[k]], SMALL), { headers });
-        const name = `${String(k).padStart(2, "0")}.${extFor(res.headers.get("content-type") || "")}`;
-        await writeFile(join(dir, name), Buffer.from(await res.arrayBuffer()));
+      let missing = 0;
+      let reused = 0;
+      for (let k = 0; k < wanted.length; k++) {
+        const prefix = String(k).padStart(2, "0");
+        const old = have.get(wanted[k]);
+        let name = old && `${prefix}.${old.split(".").pop()}`;
+        if (old) await copyFile(join(outDir, old.replace(/^baked\//, "")), join(tmp, name)).then(() => reused++, () => (name = null));
+        if (!name) {
+          await sleep(delayMs);
+          try {
+            const res = await get(pageImageUrl(m.pages[wanted[k]], SMALL), { headers });
+            name = `${prefix}.${extFor(res.headers.get("content-type") || "")}`;
+            await writeFile(join(tmp, name), Buffer.from(await res.arrayBuffer()));
+          } catch (err) {
+            log(`      page ${wanted[k] + 1}: ${err.message}`);
+            // Give up early once there's no way to reach the minimum.
+            if (++missing > wanted.length - minFrames) throw new Error(`too many page images failed (${missing} of ${wanted.length})`);
+            continue;
+          }
+        }
+        pages.push(wanted[k]);
         files.push(`baked/${slug}/${name}`);
       }
 
+      // Swap the finished folder in; the old one stays until this point.
+      await rm(dir, { recursive: true, force: true });
+      await rename(tmp, dir);
       index.items[ex.input] = {
         label: m.label,
         total: m.pages.length,
@@ -110,10 +141,16 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
         pages,
         files,
         bakedAt: new Date().toISOString().slice(0, 10),
+        ...(missing ? { partial: true } : {}),
       };
-      log(`baked ${ex.title || ex.input}: ${files.length} frames from ${m.pages.length} pages`);
+      log(
+        `baked ${ex.title || ex.input}: ${files.length} of ${wanted.length} frames from ${m.pages.length} pages` +
+          (reused ? ` (${reused} kept from last time)` : "") +
+          (missing ? `; ${missing} missing, will retry next run` : "")
+      );
     } catch (err) {
-      log(`FAIL  ${ex.title || ex.input}: ${err.message}`);
+      await rm(tmp, { recursive: true, force: true });
+      log(`FAIL  ${ex.title || ex.input}: ${err.message}${prev ? " (keeping the previous bake)" : ""}`);
     }
     await mkdir(outDir, { recursive: true });
     await writeFile(indexPath, JSON.stringify(index, null, 1) + "\n");

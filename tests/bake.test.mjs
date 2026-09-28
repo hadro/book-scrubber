@@ -4,6 +4,7 @@ import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bake, slugFor, BAKED_FRAMES } from "../scripts/bake-examples.mjs";
+import { sampleIndices } from "../js/iiif.js";
 import { v2Manifest } from "./fixtures.mjs";
 
 function fakeFetch(calls) {
@@ -58,4 +59,45 @@ test("a hung request times out and is retried instead of stalling the bake", asy
   const index = await bake([ex], { outDir, fetchImpl: hangFirst, delayMs: 0, timeoutMs: 20, log: () => {} });
   assert.equal(index.items[ex.input].files.length, BAKED_FRAMES);
   assert.ok([...seen.values()].every((n) => n <= 2));
+});
+
+test("a partial bake is saved, then completed by the next run without refetching what it has", async () => {
+  const outDir = await mkdtemp(join(tmpdir(), "bake-"));
+  const ex = { title: "Flaky", input: "https://example.org/flaky/manifest.json" };
+  const broken = new Set(sampleIndices(100, BAKED_FRAMES).slice(1, 4).map((p) => `p${p}`)); // 3 of the sampled pages
+  const calls = [];
+  const flaky = async (url) => {
+    calls.push(url);
+    if ([...broken].some((p) => url.includes(`/${p}/`))) return new Response("gone", { status: 404 });
+    return fakeFetch([])(url);
+  };
+  const first = await bake([ex], { outDir, fetchImpl: flaky, delayMs: 0, log: () => {} });
+  const item = first.items[ex.input];
+  assert.equal(item.partial, true);
+  assert.equal(item.files.length, item.pages.length);
+  const missing = sampleIndices(100, BAKED_FRAMES).filter((p) => !item.pages.includes(p));
+  assert.equal(missing.length, 3);
+  assert.equal((await readdir(join(outDir, slugFor(ex.input)))).length, item.files.length);
+
+  // Next run: the server has recovered. Only the missing frames are fetched.
+  broken.clear();
+  calls.length = 0;
+  const second = await bake([ex], { outDir, fetchImpl: flaky, delayMs: 0, log: () => {} });
+  const done = second.items[ex.input];
+  assert.equal(done.partial, undefined);
+  assert.equal(done.files.length, BAKED_FRAMES);
+  assert.equal(calls.filter((u) => !u.endsWith("manifest.json")).length, missing.length);
+  assert.equal((await readdir(join(outDir, slugFor(ex.input)))).length, BAKED_FRAMES);
+  assert.deepEqual((await readdir(outDir)).sort(), ["index.json", slugFor(ex.input)].sort()); // no temp folder left
+});
+
+test("a failed re-bake keeps the previous bake intact", async () => {
+  const outDir = await mkdtemp(join(tmpdir(), "bake-"));
+  const ex = { title: "Good", input: "https://example.org/good/manifest.json" };
+  const first = await bake([ex], { outDir, fetchImpl: fakeFetch([]), delayMs: 0, log: () => {} });
+  const allImagesFail = async (url) => (url.endsWith("manifest.json") ? fakeFetch([])(url) : new Response("down", { status: 404 }));
+  const second = await bake([ex], { outDir, fetchImpl: allImagesFail, force: true, delayMs: 0, log: () => {} });
+  assert.deepEqual(second.items[ex.input], first.items[ex.input]);
+  assert.equal((await readdir(join(outDir, slugFor(ex.input)))).length, BAKED_FRAMES);
+  assert.deepEqual((await readdir(outDir)).sort(), ["index.json", slugFor(ex.input)].sort());
 });
