@@ -81,7 +81,7 @@ export function resolveInput(raw) {
   // UUID without reading the page itself (see inputHint).
   if (host === "getty.edu" && path.startsWith("/art/collection/object")) return [];
 
-  // Wellcome Collection work page can't be mapped without their catalogue API,
+  // Wellcome Collection work page can't be mapped without their catalog API,
   // but a bare b-number link to their IIIF server is fine as-is.
 
   return [url.toString()];

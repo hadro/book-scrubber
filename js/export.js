@@ -33,7 +33,7 @@ function loadsWithoutCors(url) {
 }
 
 const checkAbort = (signal) => {
-  if (signal && signal.aborted) throw new DOMException("Cancelled", "AbortError");
+  if (signal && signal.aborted) throw new DOMException("Canceled", "AbortError");
 };
 
 /** Load page images one at a time (gentle on the server), skipping broken ones. */

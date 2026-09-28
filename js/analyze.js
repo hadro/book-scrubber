@@ -3,17 +3,17 @@
 // The image is shrunk to 48×48 (ignoring an 8% margin, where scan edges and
 // rulers live) and three numbers are measured:
 //   - spread: standard deviation of brightness (0–255)
-//   - colour: spread of the red-green and yellow-blue opponent channels
-//     (the variance part of Hasler & Süsstrunk's colourfulness), so evenly
-//     yellowed paper doesn't count as colourful
+//   - color: spread of the red-green and yellow-blue opponent channels
+//     (the variance part of Hasler & Süsstrunk's colorfulness), so evenly
+//     yellowed paper doesn't count as colorful
 //   - dark: share of pixels well below the page's average brightness
 //   - picture: the largest connected region noticeably darker than the paper,
 //     and how much brightness varies inside it. Photographs and engravings
 //     make one big region full of light and shade (a sepia albumen print
-//     mounted on card has no strong colour or black, but plenty of tone);
-//     a block of text makes a region too, but an evenly grey one.
-// At this size lines of text blur into an even grey, while illustrations keep
-// big dark or coloured areas. The thresholds are heuristics, tuned on
+//     mounted on card has no strong color or black, but plenty of tone);
+//     a block of text makes a region too, but an evenly gray one.
+// At this size lines of text blur into an even gray, while illustrations keep
+// big dark or colored areas. The thresholds are heuristics, tuned on
 // synthetic pages; expect to adjust them after looking at real books.
 
 const SIZE = 48;
@@ -21,8 +21,8 @@ let ctx = null;
 
 export const THRESHOLDS = {
   blankSpread: 5, // low on purpose: showing a near-blank page beats hiding faint text
-  blankColour: 5,
-  plateColour: 18,
+  blankColor: 5,
+  plateColor: 18,
   plateSpread: 45,
   plateDark: 0.22,
   pictureArea: 0.08, // share of the page covered by one darker region...
@@ -69,7 +69,7 @@ export function classify(data) {
   const spread = Math.sqrt(Math.max(0, sumL2 / n - mean * mean));
   const sdRG = Math.sqrt(Math.max(0, sumRG2 / n - (sumRG / n) ** 2));
   const sdYB = Math.sqrt(Math.max(0, sumYB2 / n - (sumYB / n) ** 2));
-  const colour = Math.sqrt(sdRG * sdRG + sdYB * sdYB);
+  const color = Math.sqrt(sdRG * sdRG + sdYB * sdYB);
   let darkCount = 0;
   for (let i = 0; i < n; i++) if (lum[i] < mean - 50) darkCount++;
   const dark = darkCount / n;
@@ -77,13 +77,13 @@ export function classify(data) {
   const t = THRESHOLDS;
   const pic = pictureRegion(lum, t.pictureDepth);
   let kind = "text";
-  if (spread < t.blankSpread && colour < t.blankColour) kind = "blank";
-  else if (colour > t.plateColour || spread > t.plateSpread || dark > t.plateDark) kind = "plate";
+  if (spread < t.blankSpread && color < t.blankColor) kind = "blank";
+  else if (color > t.plateColor || spread > t.plateSpread || dark > t.plateDark) kind = "plate";
   else if (pic.area >= t.pictureArea && pic.tone >= t.pictureTone) kind = "plate";
   return {
     kind,
     spread: Math.round(spread),
-    colour: Math.round(colour),
+    color: Math.round(color),
     dark: Math.round(dark * 100) / 100,
     area: Math.round(pic.area * 100) / 100,
     tone: Math.round(pic.tone),
