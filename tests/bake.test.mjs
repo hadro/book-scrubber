@@ -23,7 +23,7 @@ test("bake writes sampled thumbnails and an index; failures don't clobber", asyn
     { title: "Good", input: "https://example.org/good/manifest.json" },
     { title: "Broken", input: "https://example.org/broken/manifest.json" },
   ];
-  const index = await bake(examples, { outDir, fetchImpl: fakeFetch(calls), delayMs: 0, log: () => {} });
+  const index = await bake(examples, { outDir, fetchImpl: fakeFetch(calls), delayMs: 0, retryDelayMs: 0, log: () => {} });
 
   const item = index.items[examples[0].input];
   assert.equal(item.total, 100);
@@ -39,7 +39,7 @@ test("bake writes sampled thumbnails and an index; failures don't clobber", asyn
 
   // Second run skips what's already baked: no new requests.
   const before = calls.length;
-  await bake([examples[0]], { outDir, fetchImpl: fakeFetch(calls), delayMs: 0, log: () => {} });
+  await bake([examples[0]], { outDir, fetchImpl: fakeFetch(calls), delayMs: 0, retryDelayMs: 0, log: () => {} });
   assert.equal(calls.length, before);
 });
 
@@ -56,7 +56,7 @@ test("a hung request times out and is retried instead of stalling the bake", asy
     return fakeFetch([])(url);
   };
   const ex = { title: "Hangs", input: "https://example.org/hang/manifest.json" };
-  const index = await bake([ex], { outDir, fetchImpl: hangFirst, delayMs: 0, timeoutMs: 20, log: () => {} });
+  const index = await bake([ex], { outDir, fetchImpl: hangFirst, delayMs: 0, retryDelayMs: 0, timeoutMs: 20, log: () => {} });
   assert.equal(index.items[ex.input].files.length, BAKED_FRAMES);
   assert.ok([...seen.values()].every((n) => n <= 2));
 });
@@ -71,7 +71,7 @@ test("a partial bake is saved, then completed by the next run without refetching
     if ([...broken].some((p) => url.includes(`/${p}/`))) return new Response("gone", { status: 404 });
     return fakeFetch([])(url);
   };
-  const first = await bake([ex], { outDir, fetchImpl: flaky, delayMs: 0, log: () => {} });
+  const first = await bake([ex], { outDir, fetchImpl: flaky, delayMs: 0, retryDelayMs: 0, log: () => {} });
   const item = first.items[ex.input];
   assert.equal(item.partial, true);
   assert.equal(item.files.length, item.pages.length);
@@ -82,7 +82,7 @@ test("a partial bake is saved, then completed by the next run without refetching
   // Next run: the server has recovered. Only the missing frames are fetched.
   broken.clear();
   calls.length = 0;
-  const second = await bake([ex], { outDir, fetchImpl: flaky, delayMs: 0, log: () => {} });
+  const second = await bake([ex], { outDir, fetchImpl: flaky, delayMs: 0, retryDelayMs: 0, log: () => {} });
   const done = second.items[ex.input];
   assert.equal(done.partial, undefined);
   assert.equal(done.files.length, BAKED_FRAMES);
@@ -94,10 +94,33 @@ test("a partial bake is saved, then completed by the next run without refetching
 test("a failed re-bake keeps the previous bake intact", async () => {
   const outDir = await mkdtemp(join(tmpdir(), "bake-"));
   const ex = { title: "Good", input: "https://example.org/good/manifest.json" };
-  const first = await bake([ex], { outDir, fetchImpl: fakeFetch([]), delayMs: 0, log: () => {} });
+  const first = await bake([ex], { outDir, fetchImpl: fakeFetch([]), delayMs: 0, retryDelayMs: 0, log: () => {} });
   const allImagesFail = async (url) => (url.endsWith("manifest.json") ? fakeFetch([])(url) : new Response("down", { status: 404 }));
-  const second = await bake([ex], { outDir, fetchImpl: allImagesFail, force: true, delayMs: 0, log: () => {} });
+  const second = await bake([ex], { outDir, fetchImpl: allImagesFail, force: true, delayMs: 0, retryDelayMs: 0, log: () => {} });
   assert.deepEqual(second.items[ex.input], first.items[ex.input]);
   assert.equal((await readdir(join(outDir, slugFor(ex.input)))).length, BAKED_FRAMES);
   assert.deepEqual((await readdir(outDir)).sort(), ["index.json", slugFor(ex.input)].sort());
+});
+
+test("a page stuck at 300px is fetched at 301px instead, and 301 goes first after that", async () => {
+  const outDir = await mkdtemp(join(tmpdir(), "bake-"));
+  const calls = [];
+  const stuck300 = async (url, { signal } = {}) => {
+    calls.push(url);
+    if (url.includes("/full/300,")) {
+      const socket = setTimeout(() => {}, 60000); // hold the loop open like a real socket
+      return new Promise((_, reject) => signal.addEventListener("abort", () => (clearTimeout(socket), reject(signal.reason))));
+    }
+    return fakeFetch([])(url);
+  };
+  const logs = [];
+  const ex = { title: "Stuck", input: "https://example.org/stuck/manifest.json" };
+  const index = await bake([ex], { outDir, fetchImpl: stuck300, delayMs: 0, retryDelayMs: 0, timeoutMs: 20, log: (l) => logs.push(l) });
+  assert.equal(index.items[ex.input].files.length, BAKED_FRAMES);
+  assert.equal(index.items[ex.input].partial, undefined);
+  const images = calls.filter((u) => !u.endsWith("manifest.json"));
+  // One stuck 300px request on the first page; every page after that goes straight to 301.
+  assert.equal(images.filter((u) => u.includes("/full/300,")).length, 1);
+  assert.equal(images.filter((u) => u.includes("/full/301,")).length, BAKED_FRAMES);
+  assert.match(logs.at(-1), /24 at 301px/);
 });
