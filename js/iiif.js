@@ -394,6 +394,23 @@ export function parseManifest(json) {
 export const SMALL = 300;
 export const BIG = 800;
 
+/**
+ * Widths particular servers are known to choke on, and what to ask for
+ * instead. iiif.archive.org answers "full/300,/…" very slowly or not at all
+ * (seen September 2026) while 301 on the same, never-requested page comes
+ * back at once, so something on their side special-cases that exact size.
+ */
+const AVOID_WIDTHS = [{ host: "iiif.archive.org", width: SMALL, use: SMALL + 1 }];
+
+function workableWidth(svc, w) {
+  let host = "";
+  try {
+    host = new URL(svc.id).hostname;
+  } catch {}
+  const quirk = AVOID_WIDTHS.find((q) => q.host === host && q.width === w);
+  return quirk ? quirk.use : w;
+}
+
 function sizeUrl(svc, w, h) {
   // Canonical size syntax: "w,h" for Image API 3, "w," for 2. Caches key on
   // the exact URL, so matching what other viewers ask for means more hits.
@@ -427,7 +444,7 @@ export function pageImageUrl(page, width) {
     if (svc.level !== 0) {
       const W = page.imgWidth;
       const H = page.imgHeight;
-      const w = W ? Math.min(width, W) : width;
+      const w = workableWidth(svc, W ? Math.min(width, W) : width);
       const h = W && H ? Math.round((w * H) / W) : null;
       return sizeUrl(svc, w, h);
     }

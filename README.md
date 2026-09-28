@@ -163,6 +163,7 @@ Page views record the page path only. Share links keep the book in the `#m=…` 
 
 - **GIFs need CORS.** Scrubbing works with any IIIF server. Making a GIF means drawing the images onto a canvas, which works only when the image server sends `Access-Control-Allow-Origin`. When it doesn't, the viewer says so, and scrubbing still works. The fix would be a small proxy, for example a Hugging Face Space with a Python backend.
 - **Level-0 image servers**, which serve only pre-made sizes, are handled when the manifest lists `sizes`. Otherwise the app falls back to the full image.
+- **Internet Archive stalls on 300px requests.** `iiif.archive.org` answers `full/300,/…` very slowly or not at all, while other widths come back quickly, so Flipbook asks IA for 301px instead. Workarounds like this live in `AVOID_WIDTHS` in `js/iiif.js`.
 - **Collections** are read one level deep. Nested sub-collections aren't opened, so paste one of those directly.
 - **Page detection is heuristic.** Unusual scans (dark backgrounds, colour charts, heavy bleed-through) can be misjudged. When a book has no detected plates, "plates only" falls back to all non-blank pages.
 - **Link previews are site-wide.** Crawlers don't run JavaScript, so a shared book link previews as Flipbook, not as the book itself. Per-book previews would need a server.
