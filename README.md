@@ -2,7 +2,7 @@
 
 Hover over a digitized book and wiggle your mouse to flip through its pages. Click one to open it with play controls, and to turn it into an animated GIF, a short video or a contact sheet.
 
-It's a small homage to the animated book thumbnails that used to flicker through Internet Archive search results about ten years ago. It works with **any IIIF manifest**, so books from almost any library can go on the shelf.
+It's a small homage to the animated book thumbnails that used to flicker through Internet Archive search results more than a decade ago. It works with **any IIIF manifest**, so books from almost any library can go on the shelf.
 
 Why it exists, and how libraries have tried to show a whole book with one thumbnail: [How Do You Represent a Book with a Single Image?](https://hadro.github.io/blog/flipbook/)
 
