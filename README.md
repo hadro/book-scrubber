@@ -84,7 +84,7 @@ So the homepage doesn't send every visitor's hovering to the libraries, the exam
 - **On GitHub:** Actions tab → "Bake example shelf" → Run workflow. It runs the tests, bakes anything not yet baked, and commits the results to the branch you ran it on. Tick "force" to re-bake everything.
 - **Locally:** `node scripts/bake-examples.mjs` (add `--force` to re-bake).
 
-The baker sends one request at a time with a pause between them and identifies itself with a descriptive User-Agent. Until `baked/` exists, the site loads everything live, so baking is optional. Opening a book in the viewer always loads its full manifest live.
+The baker sends one request at a time with a pause between them and identifies itself with a descriptive User-Agent. A request with no response after 30 seconds is abandoned and retried (up to 3 tries), so one hung image can't stall a bake; the health check does the same with one retry. Until `baked/` exists, the site loads everything live, so baking is optional. Opening a book in the viewer always loads its full manifest live.
 
 Before baking, check that you're comfortable re-hosting thumbnails of each example. Most are public domain, but each institution's terms apply.
 

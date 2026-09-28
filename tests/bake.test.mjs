@@ -41,3 +41,21 @@ test("bake writes sampled thumbnails and an index; failures don't clobber", asyn
   await bake([examples[0]], { outDir, fetchImpl: fakeFetch(calls), delayMs: 0, log: () => {} });
   assert.equal(calls.length, before);
 });
+
+test("a hung request times out and is retried instead of stalling the bake", async () => {
+  const outDir = await mkdtemp(join(tmpdir(), "bake-"));
+  const seen = new Map();
+  const hangFirst = async (url, { signal } = {}) => {
+    seen.set(url, (seen.get(url) || 0) + 1);
+    if (seen.get(url) === 1 && !url.endsWith("manifest.json")) {
+      // Hold the event loop open like a real socket would (timeout signals don't).
+      const socket = setTimeout(() => {}, 60000);
+      return new Promise((_, reject) => signal.addEventListener("abort", () => (clearTimeout(socket), reject(signal.reason))));
+    }
+    return fakeFetch([])(url);
+  };
+  const ex = { title: "Hangs", input: "https://example.org/hang/manifest.json" };
+  const index = await bake([ex], { outDir, fetchImpl: hangFirst, delayMs: 0, timeoutMs: 20, log: () => {} });
+  assert.equal(index.items[ex.input].files.length, BAKED_FRAMES);
+  assert.ok([...seen.values()].every((n) => n <= 2));
+});

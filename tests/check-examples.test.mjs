@@ -58,3 +58,26 @@ test("a 403 is a warning (blocked from CI), not a failure", async () => {
   assert.equal(missing.blocked, false);
   assert.match(toMarkdown([row, missing]), /\*\*1 of 2 examples are broken\.\*\*/);
 });
+
+test("a hung request is retried once, then reported without waiting forever", async () => {
+  // Hold the event loop open like a real socket would (timeout signals don't).
+  const hang = (signal) => {
+    const socket = setTimeout(() => {}, 60000);
+    return new Promise((_, reject) => signal.addEventListener("abort", () => (clearTimeout(socket), reject(signal.reason))));
+  };
+  let imageCalls = 0;
+  const hangOnce = async (url, { signal } = {}) => {
+    if (url.endsWith("manifest.json")) return Response.json(v3Manifest(3, { base: "https://img.example.org/b" }));
+    if (++imageCalls === 1) return hang(signal);
+    return new Response("x", { headers: { "content-type": "image/jpeg", "access-control-allow-origin": "*" } });
+  };
+  const ok = await checkExample({ title: "HangOnce", input: "https://example.org/h/manifest.json" }, { fetchImpl: hangOnce, retryDelay: 0, timeoutMs: 20 });
+  assert.equal(ok.ok, true);
+  assert.match(ok.image, /after a retry/);
+
+  const always = async (url, { signal } = {}) => (url.endsWith("manifest.json") ? Response.json(v3Manifest(3)) : hang(signal));
+  const bad = await checkExample({ title: "Hangs", input: "https://example.org/h2/manifest.json" }, { fetchImpl: always, retryDelay: 0, timeoutMs: 20 });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.blocked, false);
+  assert.match(bad.image, /no response after 0.02 s, even after a retry/);
+});

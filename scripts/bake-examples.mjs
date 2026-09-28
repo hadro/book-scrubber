@@ -30,14 +30,20 @@ export const slugFor = (input) =>
 
 const extFor = (type) => (/png/.test(type) ? "png" : /gif/.test(type) ? "gif" : /webp/.test(type) ? "webp" : /svg/.test(type) ? "svg" : "jpg");
 
-async function fetchWithRetry(fetchImpl, url, opts, tries = 3) {
+/**
+ * Fetch and read the whole body, retrying server errors and hangs. Each
+ * attempt gets `timeoutMs`: some image servers (the Internet Archive's, now
+ * and then) leave a request hanging for minutes while a fresh one is quick.
+ */
+async function fetchWithRetry(fetchImpl, url, opts, { tries = 3, timeoutMs = 30000 } = {}) {
   for (let i = 1; ; i++) {
     try {
-      const res = await fetchImpl(url, opts);
-      if (res.ok) return res;
-      if (i >= tries || (res.status < 500 && res.status !== 429)) throw new Error(`HTTP ${res.status} for ${url}`);
+      const res = await fetchImpl(url, { ...opts, signal: AbortSignal.timeout(timeoutMs) });
+      if (res.ok) return new Response(await res.arrayBuffer(), { status: res.status, headers: res.headers });
+      if (i >= tries || (res.status < 500 && res.status !== 429)) throw Object.assign(new Error(`HTTP ${res.status} for ${url}`), { final: true });
     } catch (err) {
-      if (i >= tries) throw err;
+      if (err.final) throw err;
+      if (i >= tries) throw err.name === "TimeoutError" ? new Error(`no response after ${timeoutMs / 1000} s, ${tries} times, for ${url}`) : err;
     }
     await sleep(2000 * i);
   }
@@ -47,7 +53,8 @@ async function fetchWithRetry(fetchImpl, url, opts, tries = 3) {
  * Bake `examples` into `outDir`. Returns the index object that was written.
  * Examples that fail keep whatever was baked for them before.
  */
-export async function bake(examples, { outDir, fetchImpl = fetch, force = false, delayMs = 400, log = console.log } = {}) {
+export async function bake(examples, { outDir, fetchImpl = fetch, force = false, delayMs = 400, timeoutMs = 30000, log = console.log } = {}) {
+  const get = (url, opts) => fetchWithRetry(fetchImpl, url, opts, { timeoutMs });
   const indexPath = join(outDir, "index.json");
   let index = { frames: BAKED_FRAMES, items: {} };
   try {
@@ -65,7 +72,7 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
       let manifestUrl, json;
       for (const url of resolveInput(ex.input)) {
         try {
-          json = await (await fetchWithRetry(fetchImpl, url, { headers })).json();
+          json = await (await get(url, { headers })).json();
           manifestUrl = url;
           break;
         } catch (err) {
@@ -76,7 +83,7 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
       // Multi-part records can be collections: use the first part, like the site does.
       ({ url: manifestUrl, json } = await followToManifest({ url: manifestUrl, json }, async (u) => ({
         url: u,
-        json: await (await fetchWithRetry(fetchImpl, u, { headers })).json(),
+        json: await (await get(u, { headers })).json(),
       })));
       const m = parseManifest(json);
       const pages = sampleIndices(m.pages.length, BAKED_FRAMES);
@@ -87,7 +94,7 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
       const files = [];
       for (let k = 0; k < pages.length; k++) {
         await sleep(delayMs);
-        const res = await fetchWithRetry(fetchImpl, pageImageUrl(m.pages[pages[k]], SMALL), { headers });
+        const res = await get(pageImageUrl(m.pages[pages[k]], SMALL), { headers });
         const name = `${String(k).padStart(2, "0")}.${extFor(res.headers.get("content-type") || "")}`;
         await writeFile(join(dir, name), Buffer.from(await res.arrayBuffer()));
         files.push(`baked/${slug}/${name}`);
