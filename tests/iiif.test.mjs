@@ -18,10 +18,17 @@ import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
 test("resolveInput: bare IA identifier and archive.org URLs", () => {
   assert.deepEqual(resolveInput("kunstformenderna00haec"), [
-    "https://iiif.archive.org/iiif/3/kunstformenderna00haec/manifest.json",
+    "https://iiif.archive.org/iiif/kunstformenderna00haec/manifest.json",
   ]);
   assert.deepEqual(resolveInput("https://archive.org/details/foo_bar/page/n5/mode/2up"), [
-    "https://iiif.archive.org/iiif/3/foo_bar/manifest.json",
+    "https://iiif.archive.org/iiif/foo_bar/manifest.json",
+  ]);
+  // The "/3/" alias works too, but the canonical address has no version in it.
+  assert.deepEqual(resolveInput("https://iiif.archive.org/iiif/3/foo_bar/manifest.json"), [
+    "https://iiif.archive.org/iiif/foo_bar/manifest.json",
+  ]);
+  assert.deepEqual(resolveInput("https://iiif.archive.org/iiif/foo_bar/manifest.json"), [
+    "https://iiif.archive.org/iiif/foo_bar/manifest.json",
   ]);
 });
 
@@ -50,7 +57,7 @@ test("resolveInput: NGA catalog records, viewer links, Getty hint", () => {
     ["https://libraryimage.nga.gov/manifest/mms/991861883504896.json"]
   );
   assert.deepEqual(resolveInput("https://viewer.example.org/?iiif-content=https://archive.org/details/foo"), [
-    "https://iiif.archive.org/iiif/3/foo/manifest.json",
+    "https://iiif.archive.org/iiif/foo/manifest.json",
   ]);
   assert.deepEqual(resolveInput("https://www.getty.edu/art/collection/object/104J2P"), []);
   assert.match(inputHint("https://www.getty.edu/art/collection/object/104J2P"), /IIIF/);
@@ -198,6 +205,7 @@ test("homepage comes from v3 homepage or v2 related", () => {
 
 test("item pages are derived from manifest and catalog URLs", () => {
   assert.equal(itemPageFromUrl("https://iiif.archive.org/iiif/3/b33498854/manifest.json"), "https://archive.org/details/b33498854");
+  assert.equal(itemPageFromUrl("https://iiif.archive.org/iiif/b33498854/manifest.json"), "https://archive.org/details/b33498854");
   assert.equal(itemPageFromUrl("https://www.loc.gov/item/03032405/manifest.json"), "https://www.loc.gov/item/03032405/");
   assert.equal(
     itemPageFromUrl("https://api-collections.nypl.org/manifests/dce441f0-83d3-0132-efca-58d385a7b928"),
