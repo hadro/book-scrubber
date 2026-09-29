@@ -173,3 +173,7 @@ Page views record the page path only. Share links keep the book in the `#m=…` 
 - **Collections** are read one level deep. Nested sub-collections aren't opened, so paste one of those directly.
 - **Page detection is heuristic.** Unusual scans (dark backgrounds, colour charts, heavy bleed-through) can be misjudged. When a book has no detected plates, "plates only" falls back to all non-blank pages.
 - **Link previews are site-wide.** Crawlers don't run JavaScript, so a shared book link previews as Flipbook, not as the book itself. Per-book previews would need a server.
+
+## License
+
+The code is [MIT](LICENSE). The page images in `baked/` and the social card made from them are not covered: they belong to the holding institutions, so see each item's source for its rights. The bundled GIF encoder, `vendor/gifenc.esm.js`, is MIT too (see `vendor/gifenc.LICENSE.md`).
