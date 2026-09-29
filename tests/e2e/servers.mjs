@@ -55,7 +55,7 @@ const svgPage = (kind, label) => {
 };
 const KINDS = ["blank", "text", "text", "plate", "plate", "plate"];
 
-// name: [presentation version, pages, image behaviour]
+// name: [presentation version, pages, image behavior]
 const BOOKS = {
   plain: [3, 60, "ok"],
   big: [3, 400, "ok"],

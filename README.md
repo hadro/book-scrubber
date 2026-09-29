@@ -2,7 +2,7 @@
 
 Hover over a digitized book and wiggle your mouse to flip through its pages. Click one to open it with play controls, and to turn it into an animated GIF, a short video or a contact sheet.
 
-It's a small homage to the animated book thumbnails that used to flicker through Internet Archive search results about ten years ago. It works with **any IIIF manifest**, so books from almost any library can go on the shelf.
+It's a small homage to the animated book thumbnails that used to flicker through Internet Archive search results more than a decade ago. It works with **any IIIF manifest**, so books from almost any library can go on the shelf.
 
 Why it exists, and how libraries have tried to show a whole book with one thumbnail: [How Do You Represent a Book with a Single Image?](https://hadro.github.io/blog/flipbook/)
 
@@ -10,7 +10,7 @@ Why it exists, and how libraries have tried to show a whole book with one thumbn
 
 - **Links to the source.** Every card links to its IIIF manifest and, when known, the item's page at its institution. The item page comes from, in order: a `page` set in `js/examples.js`, the manifest's `homepage` (v3) or `related` (v2), or the URL itself for IA, LoC, NYPL, e-codices, NGA and Yale. The viewer shows the same links.
 - **Hover-to-flip cards.** Mouse position maps to a page. Pages load "coarse first" (ends, then middle, then quarters, and so on), so you can scrub the whole book almost at once. On phones, drag a finger sideways across a card.
-- **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (at 48×48 px: brightness spread, colour, dark areas, and the largest darker region with varied tones inside, which catches sepia photographs and engravings) and labelled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations; it starts off on every visit, and cards show "· plates" while it's filtering. Books with fewer than 3 detected plates show all non-blank pages instead. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
+- **Skips blank pages; "plates only" mode.** Each thumbnail is measured as it loads (at 48×48 px: brightness spread, color, dark areas, and the largest darker region with varied tones inside, which catches sepia photographs and engravings) and labeled blank, text or plate. Blank pages are never shown while scrubbing. Turn on "Plates only" to scrub just the illustrations; it starts off on every visit, and cards show "· plates" while it's filtering. Books with fewer than 3 detected plates show all non-blank pages instead. This works for servers that allow CORS and for the baked shelf; `js/analyze.js` has the thresholds.
 - **Paste your own, or drag it in.** Accepts a IIIF Presentation v2 or v3 manifest or **collection** (its first 36 books go on the shelf), or a page URL from:
   - `archive.org/details/…`, or a bare IA identifier
   - `loc.gov/item/…`
@@ -30,7 +30,7 @@ Why it exists, and how libraries have tried to show a whole book with one thumbn
 - **Exports.** GIF, video (WebM or MP4, whichever the browser can record) or a contact-sheet JPEG. Choose frames, width, speed and pages (no blanks, plates only, or all). A credit line with the title and institution is added by default. GIFs are encoded in the browser with [gifenc](https://github.com/mattdesl/gifenc), vendored in `vendor/`.
 - **Flash mode.** Every card cycles its pages at once, like the old IA search results.
 - Right-to-left books scrub in the right direction. Light and dark themes follow the OS setting.
-- **Accessible (WCAG 2.2 AA).** Arrow keys scrub a focused card, and screen readers announce the page ("Page 12 of 240"). Focus returns to the card when the viewer closes, and the viewer has Previous/Next buttons as well as the slider. There is a skip link, and errors and export progress are announced. Colours pass contrast in light and dark themes, controls are at least 24×24 px, and the layout works at 320px wide. The OS "reduce motion" setting slows flash mode and playback and turns off decorative animation; the title wobble stops after a few seconds, and GIF previews have a pause button. `npm run test:e2e` runs an [axe-core](https://github.com/dequelabs/axe-core) audit of every screen, plus reflow, target-size and keyboard checks.
+- **Accessible (WCAG 2.2 AA).** Arrow keys scrub a focused card, and screen readers announce the page ("Page 12 of 240"). Focus returns to the card when the viewer closes, and the viewer has Previous/Next buttons as well as the slider. There is a skip link, and errors and export progress are announced. Colors pass contrast in light and dark themes, controls are at least 24×24 px, and the layout works at 320px wide. The OS "reduce motion" setting slows flash mode and playback and turns off decorative animation; the title wobble stops after a few seconds, and GIF previews have a pause button. `npm run test:e2e` runs an [axe-core](https://github.com/dequelabs/axe-core) audit of every screen, plus reflow, target-size and keyboard checks.
 - **Link previews.** Open Graph and Twitter card metadata, with a share image (`img/social-card.png`).
 
 ## Running locally
@@ -84,7 +84,7 @@ So the homepage doesn't send every visitor's hovering to the libraries, the exam
 - **On GitHub:** Actions tab → "Bake example shelf" → Run workflow. It runs the tests, bakes anything not yet (fully) baked, and commits the results to the branch you ran it on. Tick "force" to re-bake everything.
 - **Locally:** `node scripts/bake-examples.mjs` (add `--force` to re-bake). Useful for libraries that block GitHub's servers, such as the Library of Congress.
 
-The baker sends one request at a time with a pause between them and identifies itself with a descriptive User-Agent. A request with no response after 30 seconds is abandoned and retried (up to 3 tries), so one hung image can't stall a bake; the health check does the same with one retry.
+The baker sends one request at a time with a pause between them and identifies itself with a descriptive User-Agent. A request with no response after 30 seconds is abandoned and retried (up to 3 tries), so one hung image can't stall a bake; the health check does the same with one retry. The baker's retries alternate between the 300px URL and the same image at 301px. The Internet Archive's server sometimes gets stuck on one URL while a slightly different one comes straight back, and once 301px works for a book, its remaining pages try 301px first.
 
 A page image that still won't load is skipped. If a book gets at least half of its 24 frames, it's saved and marked `partial` in `baked/index.json`, and the next run downloads only the missing frames. Each book is baked into a temporary folder that replaces the old one only when the bake succeeds, so a failed re-bake (even with `--force`) keeps whatever was baked before.
 
@@ -171,7 +171,7 @@ Page views record the page path only. Share links keep the book in the `#m=…` 
 - **GIFs need CORS.** Scrubbing works with any IIIF server. Making a GIF means drawing the images onto a canvas, which works only when the image server sends `Access-Control-Allow-Origin`. When it doesn't, the viewer says so, and scrubbing still works. The fix would be a small proxy, for example a Hugging Face Space with a Python backend.
 - **Level-0 image servers**, which serve only pre-made sizes, are handled when the manifest lists `sizes`. Otherwise the app falls back to the full image.
 - **Collections** are read one level deep. Nested sub-collections aren't opened, so paste one of those directly.
-- **Page detection is heuristic.** Unusual scans (dark backgrounds, colour charts, heavy bleed-through) can be misjudged. When a book has no detected plates, "plates only" falls back to all non-blank pages.
+- **Page detection is heuristic.** Unusual scans (dark backgrounds, color charts, heavy bleed-through) can be misjudged. When a book has no detected plates, "plates only" falls back to all non-blank pages.
 - **Link previews are site-wide.** Crawlers don't run JavaScript, so a shared book link previews as Flipbook, not as the book itself. Per-book previews would need a server.
 
 ## License

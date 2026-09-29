@@ -38,18 +38,24 @@ const extFor = (type) => (/png/.test(type) ? "png" : /gif/.test(type) ? "gif" : 
  * Fetch and read the whole body, retrying server errors and hangs. Each
  * attempt gets `timeoutMs`: some image servers (the Internet Archive's, now
  * and then) leave a request hanging for minutes while a fresh one is quick.
+ * `urls` can list alternatives (the same image at another size); attempts
+ * take them in turn. The response's `from` says which one worked.
  */
-async function fetchWithRetry(fetchImpl, url, opts, { tries = 3, timeoutMs = 30000 } = {}) {
+async function fetchWithRetry(fetchImpl, urls, opts, { tries = 3, timeoutMs = 30000, retryDelayMs = 2000 } = {}) {
+  urls = [].concat(urls);
   for (let i = 1; ; i++) {
+    const url = urls[(i - 1) % urls.length];
     try {
       const res = await fetchImpl(url, { ...opts, signal: AbortSignal.timeout(timeoutMs) });
-      if (res.ok) return new Response(await res.arrayBuffer(), { status: res.status, headers: res.headers });
-      if (i >= tries || (res.status < 500 && res.status !== 429)) throw Object.assign(new Error(`HTTP ${res.status} for ${url}`), { final: true });
+      if (res.ok) return Object.assign(new Response(await res.arrayBuffer(), { status: res.status, headers: res.headers }), { from: url });
+      // A client error is final, unless there's another URL left to try.
+      const retryable = res.status >= 500 || res.status === 429 || urls.length > 1;
+      if (i >= tries || !retryable) throw Object.assign(new Error(`HTTP ${res.status} for ${url}`), { final: true });
     } catch (err) {
       if (err.final) throw err;
       if (i >= tries) throw err.name === "TimeoutError" ? new Error(`no response after ${timeoutMs / 1000} s, ${tries} times, for ${url}`) : err;
     }
-    await sleep(2000 * i);
+    await sleep(retryDelayMs * i);
   }
 }
 
@@ -57,8 +63,8 @@ async function fetchWithRetry(fetchImpl, url, opts, { tries = 3, timeoutMs = 300
  * Bake `examples` into `outDir`. Returns the index object that was written.
  * Examples that fail keep whatever was baked for them before.
  */
-export async function bake(examples, { outDir, fetchImpl = fetch, force = false, delayMs = 400, timeoutMs = 30000, log = console.log } = {}) {
-  const get = (url, opts) => fetchWithRetry(fetchImpl, url, opts, { timeoutMs });
+export async function bake(examples, { outDir, fetchImpl = fetch, force = false, delayMs = 400, retryDelayMs = 2000, timeoutMs = 30000, log = console.log } = {}) {
+  const get = (url, opts, tries) => fetchWithRetry(fetchImpl, url, opts, { timeoutMs, retryDelayMs, tries });
   const indexPath = join(outDir, "index.json");
   let index = { frames: BAKED_FRAMES, items: {} };
   try {
@@ -106,6 +112,11 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
       const files = [];
       let missing = 0;
       let reused = 0;
+      // Each page can also be fetched 1px wider: a different URL to the server,
+      // so a request stuck on one (as the Internet Archive's sometimes are)
+      // doesn't doom the page. Whichever size last worked goes first.
+      let preferAlt = false;
+      let usedAlt = 0;
       for (let k = 0; k < wanted.length; k++) {
         const prefix = String(k).padStart(2, "0");
         const old = have.get(wanted[k]);
@@ -114,8 +125,14 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
         if (!name) {
           await sleep(delayMs);
           try {
-            const res = await get(pageImageUrl(m.pages[wanted[k]], SMALL), { headers });
-            name = `${prefix}.${extFor(res.headers.get("content-type") || "")}`;
+            const page = m.pages[wanted[k]];
+            const main = pageImageUrl(page, SMALL);
+            const alt = pageImageUrl(page, SMALL + 1);
+            const urls = alt === main ? [main] : preferAlt ? [alt, main] : [main, alt];
+            const res = await get(urls, { headers }, urls.length > 1 ? 4 : 3);
+            preferAlt = res.from === alt && alt !== main;
+            if (res.from !== main) usedAlt++;
+            name =`${prefix}.${extFor(res.headers.get("content-type") || "")}`;
             await writeFile(join(tmp, name), Buffer.from(await res.arrayBuffer()));
           } catch (err) {
             log(`      page ${wanted[k] + 1}: ${err.message}`);
@@ -146,6 +163,7 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
       log(
         `baked ${ex.title || ex.input}: ${files.length} of ${wanted.length} frames from ${m.pages.length} pages` +
           (reused ? ` (${reused} kept from last time)` : "") +
+          (usedAlt ? ` (${usedAlt} at ${SMALL + 1}px, as ${SMALL}px got stuck)` : "") +
           (missing ? `; ${missing} missing, will retry next run` : "")
       );
     } catch (err) {
