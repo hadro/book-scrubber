@@ -191,7 +191,15 @@ export async function fetchFirstManifest(candidates, { signal } = {}) {
     try {
       // Give up on a manifest after 30 s rather than leaving a card loading forever.
       const timeout = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
-      const res = await fetch(url, { signal: signal || timeout, headers: { Accept: "application/ld+json, application/json" } });
+      const opts = { signal: signal || timeout, redirect: "follow" };
+      let res = await fetch(url, { ...opts, headers: { Accept: "application/ld+json, application/json" } });
+      // Some resolvers (ARK and handle services, notably) only redirect a
+      // browser-style request and answer 404/406 when asked for JSON: ask
+      // again the way a plain link would.
+      if (!res.ok && res.status >= 400 && res.status < 500) {
+        const plain = await fetch(url, opts).catch(() => null);
+        if (plain && plain.ok) res = plain;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return { url, json };

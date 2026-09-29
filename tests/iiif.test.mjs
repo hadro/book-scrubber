@@ -13,6 +13,7 @@ import {
   isCollection,
   itemPageFromUrl,
   followToManifest,
+  fetchFirstManifest,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -278,4 +279,26 @@ test("a IIIF image URL without a listed service still gets resized", () => {
     pageImageUrl(parseManifest(json).pages[0], 300),
     "https://tile.example.gov/image-services/iiif/service:rbc:x:0001/full/300,/0/default.jpg"
   );
+});
+
+test("fetchFirstManifest: a resolver that refuses JSON requests is asked again like a plain link", async () => {
+  const realFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    const accept = opts.headers && opts.headers.Accept;
+    calls.push(accept || "(default)");
+    if (accept) return new Response("not here", { status: 404 });
+    return new Response(JSON.stringify({ type: "Manifest", items: [] }), { status: 200 });
+  };
+  try {
+    const { url, json } = await fetchFirstManifest(["https://ark.example.org/ark:/1/x/manifest"]);
+    assert.equal(url, "https://ark.example.org/ark:/1/x/manifest");
+    assert.equal(json.type, "Manifest");
+    assert.deepEqual(calls, ["application/ld+json, application/json", "(default)"]);
+    // A real 404 still reports as one.
+    globalThis.fetch = async () => new Response("", { status: 404 });
+    await assert.rejects(fetchFirstManifest(["https://x.org/nope"]), /HTTP 404/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

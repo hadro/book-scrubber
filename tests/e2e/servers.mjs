@@ -104,6 +104,13 @@ export async function startFakeIiif() {
         })
       );
     }
+    // A persistent-identifier resolver: redirects browser-style requests to the
+    // manifest, but has no route for a request asking for JSON.
+    if ((m = u.pathname.match(/^\/ark:\/1\/(\w+)\/manifest$/)) && BOOKS[m[1]]) {
+      if (/json/.test(req.headers.accept || "")) return res.writeHead(404, cors).end();
+      res.writeHead(301, { Location: `/m/${m[1]}.json`, ...cors });
+      return res.end();
+    }
     if ((m = u.pathname.match(/^\/(img|thumb)\/(\w+)\/p(\d+)/)) && BOOKS[m[2]]) {
       const book = m[2];
       const page = Number(m[3]);

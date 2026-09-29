@@ -1,5 +1,6 @@
 import {
   resolveInput,
+  contentStateManifest,
   inputHint,
   itemPageFromUrl,
   isCollection,
@@ -858,7 +859,7 @@ function bookTag(book) {
 const SHELF_MAX = 100;
 const COLLECTION_MAX = 36;
 
-async function shelveInput(input, { open = false, page = null } = {}) {
+async function shelveInput(input, { open = false, page = null, persist = true } = {}) {
   input = input.trim();
   if (!input) return null;
   const existing = [...cards].find((c) => c.book.input === input);
@@ -881,7 +882,7 @@ async function shelveInput(input, { open = false, page = null } = {}) {
     track(`paste/fail/${hostOf(candidates[0]) || "unknown"}`);
     return null;
   }
-  if (isCollection(fetched.json)) return shelveCollection(fetched);
+  if (isCollection(fetched.json)) return shelveCollection(fetched, { persist });
 
   const book = new Book({ input, removable: true });
   try {
@@ -893,7 +894,7 @@ async function shelveInput(input, { open = false, page = null } = {}) {
   }
   const card = addCard(book, { prepend: true, animate: true });
   track(`paste/ok/${hostOf(book.manifestUrl) || "unknown"}`);
-  writeShelf([input, ...readShelf().filter((x) => x !== input)].slice(0, SHELF_MAX));
+  if (persist) writeShelf([input, ...readShelf().filter((x) => x !== input)].slice(0, SHELF_MAX));
   setStatus(`Shelved "${book.title}" (${book.data.pages.length} images). Hover it!`);
   card.el.scrollIntoView({ behavior: "smooth", block: "center" });
   if (open) openViewer(book, { page });
@@ -901,7 +902,7 @@ async function shelveInput(input, { open = false, page = null } = {}) {
 }
 
 /** A IIIF Collection: shelve its first COLLECTION_MAX manifests as separate books. */
-function shelveCollection({ url, json }) {
+function shelveCollection({ url, json }, { persist = true } = {}) {
   const { label, manifests, subCollections } = collectionMembers(json);
   track(`paste/collection/${hostOf(url) || "unknown"}`);
   if (!manifests.length) {
@@ -919,7 +920,7 @@ function shelveCollection({ url, json }) {
   for (const m of [...picked].reverse()) {
     first = addCard(new Book({ input: m.id, title: m.label, removable: true }), { prepend: true, animate: true });
   }
-  writeShelf([...picked.map((m) => m.id), ...readShelf().filter((x) => !picked.some((m) => m.id === x))].slice(0, SHELF_MAX));
+  if (persist) writeShelf([...picked.map((m) => m.id), ...readShelf().filter((x) => !picked.some((m) => m.id === x))].slice(0, SHELF_MAX));
   const more = manifests.length > COLLECTION_MAX ? ` (the first ${COLLECTION_MAX} of ${manifests.length})` : "";
   setStatus(`Shelved ${picked.length} books from the collection "${label}"${more}. Hover away!`);
   if (first) first.el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1523,6 +1524,21 @@ function openFromHash() {
   else shelveInput(input, { open: true, page });
 }
 
+/**
+ * Links like ?iiif-content=<manifest or collection URL> (or ?manifest=…) put
+ * that item on the shelf, first in line. The IIIF Content State spec's
+ * parameter name, so it also takes an encoded content state. Nothing is saved
+ * to the visitor's own shelf unless they paste it themselves.
+ */
+async function shelveFromQuery() {
+  const params = new URLSearchParams(location.search);
+  const raw = (params.get("iiif-content") || params.get("manifest") || "").trim();
+  if (!raw) return;
+  const input = /^https?:\/\//.test(raw) ? raw : contentStateManifest(raw) || raw;
+  track("link/iiif-content");
+  await shelveInput(input, { persist: false });
+}
+
 // Long-lived image cache for returning visitors (see sw.js). Optional.
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -1535,4 +1551,5 @@ for (const input of readShelf()) addCard(new Book({ input, removable: true }));
 if (new URLSearchParams(location.search).get("examples") !== "0") {
   for (const ex of EXAMPLES) addCard(new Book(ex));
 }
+shelveFromQuery();
 openFromHash();

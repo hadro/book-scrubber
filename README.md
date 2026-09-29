@@ -52,7 +52,15 @@ npm run test:e2e                  # the real app in headless Chromium against a 
 
 The end-to-end tests never contact real libraries. They start a local fake IIIF server whose books have blank, text and plate pages, and servers that lack CORS, fail, are slow, or forbid caching. They check scrubbing, politeness (request counts, backoff, caching), exports, collections, drag and drop, share links, touch and reduced motion. Both suites run on every push via `.github/workflows/test.yml`.
 
-`?examples=0` in the URL hides the starter shelf.
+### Linking to Flipbook
+
+Add `?iiif-content=` with a manifest or collection URL (or an encoded IIIF Content State) to put that item on the shelf when the page opens, for example from a collection page:
+
+```
+https://hadro.github.io/flipbook/?iiif-content=https://heritage.tudelft.nl/iiif/collections/lib-tresor-reuzenarbeid/collection.json
+```
+
+A collection shelves its first 36 manifests. `?manifest=` works the same way. Linked items aren't saved to the visitor's own shelf. Add `&examples=0` to hide the starter shelf, so only the linked content shows.
 
 ## Deploying
 

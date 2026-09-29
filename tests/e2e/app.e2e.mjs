@@ -333,6 +333,32 @@ test("pasting a collection shelves its books", async () => {
   await ctx.close();
 });
 
+test("a resolver link that redirects to the manifest can be pasted", async () => {
+  const { ctx, page } = await openApp();
+  await page.fill("#paste-input", `${iiif.origin}/ark:/1/plain/manifest`);
+  await page.click("#paste-form button[type=submit]");
+  await page.waitForSelector(".card .card-img.is-ready", { timeout: 10000 });
+  assert.equal(await page.textContent(".card-title"), "Book plain");
+  assert.match(await page.textContent("#paste-status"), /Shelved "Book plain"/);
+  await ctx.close();
+});
+
+test("?iiif-content= links shelve a collection without saving it to the visitor's shelf", async () => {
+  const ctx = await browser.newContext({ serviceWorkers: "block" });
+  const page = await ctx.newPage();
+  const content = encodeURIComponent(`${iiif.origin}/c/shelf.json`);
+  await page.goto(`${app.origin}/?examples=0&iiif-content=${content}`);
+  await page.waitForFunction(() => document.querySelectorAll(".card").length === 3);
+  assert.deepEqual(await page.locator(".card-title").allTextContents(), ["Book plain", "Book oz", "Book mixed"]);
+  assert.equal(await page.evaluate(() => localStorage.getItem("flipbook:shelf")), null);
+  // An encoded IIIF Content State works too.
+  const state = Buffer.from(JSON.stringify({ id: iiif.manifest("oz"), type: "Manifest" })).toString("base64url");
+  await page.goto(`${app.origin}/?examples=0&iiif-content=${state}`);
+  await page.waitForFunction(() => document.querySelectorAll(".card").length === 1);
+  assert.equal(await page.textContent(".card-title"), "Book oz");
+  await ctx.close();
+});
+
 test("dropping a IIIF viewer link shelves the book", async () => {
   const { ctx, page } = await openApp();
   const link = `https://viewer.example/?manifest=${encodeURIComponent(iiif.manifest("plain"))}`;
