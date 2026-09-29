@@ -27,9 +27,9 @@ export const EXAMPLES = [
   },
     {
     source: "yale",
-    title: "Voynich manuscript",
-    note: "Beinecke MS 408 · 15th century",
-    input: "https://collections.library.yale.edu/manifests/2002046",
+    title: "Ferns",
+    note: "Nature-printed plates · 1868",
+    input: "https://collections.library.yale.edu/manifests/33336990",
   },
   {
     source: "ia",

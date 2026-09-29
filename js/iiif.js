@@ -45,6 +45,10 @@ export function resolveInput(raw) {
   if (host === "archive.org" && (m = path.match(/^\/(?:details|embed|stream)\/([^/?#]+)/))) {
     return [iaManifest(decodeURIComponent(m[1]))];
   }
+  // ...and its manifests pasted with the "/3/" alias: use the canonical address.
+  if (host === "iiif.archive.org" && (m = path.match(/^\/iiif\/3\/([^/]+)\/manifest\.json$/))) {
+    return [iaManifest(decodeURIComponent(m[1]))];
+  }
 
   // Library of Congress: /item/{id}/ or /resource/{id}/ pages
   if (host === "loc.gov" && !path.endsWith("manifest.json")) {
@@ -162,7 +166,8 @@ export function itemPageFromUrl(raw) {
   return null;
 }
 
-export const iaManifest = (id) => `https://iiif.archive.org/iiif/3/${id}/manifest.json`;
+// No "/3/" in the path: that form also works, but the manifest's own `id` is this one.
+export const iaManifest = (id) => `https://iiif.archive.org/iiif/${id}/manifest.json`;
 
 /** A friendlier explanation for inputs we know can't be resolved directly. */
 export function inputHint(raw) {

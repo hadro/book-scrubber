@@ -532,7 +532,7 @@
    "rtl": false,
    "attribution": "",
    "homepage": "https://archive.org/details/kunstformenderna00haec",
-   "manifestUrl": "https://iiif.archive.org/iiif/3/kunstformenderna00haec/manifest.json",
+   "manifestUrl": "https://iiif.archive.org/iiif/kunstformenderna00haec/manifest.json",
    "pages": [
     0,
     24,
@@ -593,7 +593,7 @@
    "rtl": false,
    "attribution": "",
    "homepage": "https://archive.org/details/nationaldirectornati",
-   "manifestUrl": "https://iiif.archive.org/iiif/3/nationaldirectornati/manifest.json",
+   "manifestUrl": "https://iiif.archive.org/iiif/nationaldirectornati/manifest.json",
    "pages": [
     0,
     23,
@@ -654,7 +654,7 @@
    "rtl": false,
    "attribution": "",
    "homepage": "https://archive.org/details/birdsofamericafr01audu",
-   "manifestUrl": "https://iiif.archive.org/iiif/3/birdsofamericafr01audu/manifest.json",
+   "manifestUrl": "https://iiif.archive.org/iiif/birdsofamericafr01audu/manifest.json",
    "pages": [
     0,
     18,
@@ -715,7 +715,7 @@
    "rtl": false,
    "attribution": "",
    "homepage": "https://archive.org/details/audubon-4477-volume1",
-   "manifestUrl": "https://iiif.archive.org/iiif/3/audubon-4477-volume1/manifest.json",
+   "manifestUrl": "https://iiif.archive.org/iiif/audubon-4477-volume1/manifest.json",
    "pages": [
     0,
     5,
@@ -776,7 +776,7 @@
    "rtl": false,
    "attribution": "",
    "homepage": "https://archive.org/details/b33498854",
-   "manifestUrl": "https://iiif.archive.org/iiif/3/b33498854/manifest.json",
+   "manifestUrl": "https://iiif.archive.org/iiif/b33498854/manifest.json",
    "pages": [
     0,
     38,
@@ -830,6 +830,67 @@
     "baked/archive-org-details-b33498854/23.jpg"
    ],
    "bakedAt": "2026-09-28"
+  },
+  "https://collections.library.yale.edu/manifests/33336990": {
+   "label": "Ferns 1868",
+   "total": 190,
+   "rtl": false,
+   "attribution": "Yale University Library",
+   "homepage": "https://collections.library.yale.edu/catalog/33336990",
+   "manifestUrl": "https://collections.library.yale.edu/manifests/33336990",
+   "pages": [
+    0,
+    8,
+    16,
+    25,
+    33,
+    41,
+    49,
+    58,
+    66,
+    74,
+    82,
+    90,
+    99,
+    107,
+    115,
+    123,
+    131,
+    140,
+    148,
+    156,
+    164,
+    173,
+    181,
+    189
+   ],
+   "files": [
+    "baked/collections-library-yale-edu-manifests-33336990/00.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/01.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/02.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/03.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/04.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/05.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/06.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/07.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/08.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/09.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/10.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/11.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/12.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/13.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/14.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/15.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/16.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/17.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/18.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/19.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/20.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/21.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/22.jpg",
+    "baked/collections-library-yale-edu-manifests-33336990/23.jpg"
+   ],
+   "bakedAt": "2026-09-29"
   }
  }
 }
