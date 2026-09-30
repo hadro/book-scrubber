@@ -156,10 +156,22 @@ export async function encodeVideo(images, { width, height, delay, background, cr
 }
 
 /** One JPEG with a grid of pages. */
-export async function contactSheet(images, { cellWidth, aspect, background, credit }) {
-  const n = images.length;
-  const cols = Math.ceil(Math.sqrt(n));
+/**
+ * Where each of `n` pages goes on a contact sheet: a near-square grid, filled
+ * row by row in reading order. Right-to-left books start at the top right.
+ */
+export function sheetGrid(n, { rtl = false } = {}) {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
   const rows = Math.ceil(n / cols);
+  const cells = Array.from({ length: n }, (_, i) => {
+    const col = i % cols;
+    return { col: rtl ? cols - 1 - col : col, row: Math.floor(i / cols) };
+  });
+  return { cols, rows, cells };
+}
+
+export async function contactSheet(images, { cellWidth, aspect, background, credit, rtl = false }) {
+  const { cols, rows, cells } = sheetGrid(images.length, { rtl });
   const cw = cellWidth;
   const chh = Math.round(cw * aspect);
   const gap = Math.round(cw * 0.05);
@@ -173,8 +185,8 @@ export async function contactSheet(images, { cellWidth, aspect, background, cred
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, W, H);
   images.forEach((img, i) => {
-    const x = gap + (i % cols) * (cw + gap);
-    const y = gap + Math.floor(i / cols) * (chh + gap);
+    const x = gap + cells[i].col * (cw + gap);
+    const y = gap + cells[i].row * (chh + gap);
     drawPage(ctx, img, x, y, cw, chh, background);
   });
   if (credit) drawCredit(ctx, credit, 0, H, W, band);
