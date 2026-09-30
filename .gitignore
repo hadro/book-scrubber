@@ -1,3 +1,5 @@
 node_modules/
 # Left behind if a bake is interrupted mid-book.
 baked/.*.tmp/
+
+post.md
