@@ -13,6 +13,8 @@ import {
   isCollection,
   itemPageFromUrl,
   followToManifest,
+  fetchFirstManifest,
+  viewingDirection,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -278,4 +280,40 @@ test("a IIIF image URL without a listed service still gets resized", () => {
     pageImageUrl(parseManifest(json).pages[0], 300),
     "https://tile.example.gov/image-services/iiif/service:rbc:x:0001/full/300,/0/default.jpg"
   );
+});
+
+test("fetchFirstManifest: a resolver that refuses JSON requests is asked again like a plain link", async () => {
+  const realFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts = {}) => {
+    const accept = opts.headers && opts.headers.Accept;
+    calls.push(accept || "(default)");
+    if (accept) return new Response("not here", { status: 404 });
+    return new Response(JSON.stringify({ type: "Manifest", items: [] }), { status: 200 });
+  };
+  try {
+    const { url, json } = await fetchFirstManifest(["https://ark.example.org/ark:/1/x/manifest"]);
+    assert.equal(url, "https://ark.example.org/ark:/1/x/manifest");
+    assert.equal(json.type, "Manifest");
+    assert.deepEqual(calls, ["application/ld+json, application/json", "(default)"]);
+    // A real 404 still reports as one.
+    globalThis.fetch = async () => new Response("", { status: 404 });
+    await assert.rejects(fetchFirstManifest(["https://x.org/nope"]), /HTTP 404/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("viewing direction: all four IIIF values, v2 sequences, and the default", () => {
+  assert.equal(parseManifest(v3Manifest(2)).direction, "ltr");
+  assert.equal(parseManifest(v3Manifest(2, { rtl: true })).direction, "rtl");
+  const ttb = parseManifest(v3Manifest(2, { direction: "top-to-bottom" }));
+  assert.equal(ttb.direction, "ttb");
+  assert.equal(ttb.rtl, false);
+  assert.equal(parseManifest(v3Manifest(2, { direction: "bottom-to-top" })).direction, "btt");
+  const v2 = v2Manifest(2);
+  v2.sequences[0].viewingDirection = "top-to-bottom";
+  assert.equal(parseManifest(v2).direction, "ttb");
+  assert.equal(viewingDirection("sc:bottom-to-top"), "btt");
+  assert.equal(viewingDirection("sideways"), "ltr");
 });

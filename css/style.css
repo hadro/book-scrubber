@@ -388,6 +388,11 @@ select {
 }
 .ticks i.is-loaded, .tick-sample i.is-loaded { background: #8d8272; }
 .ticks i.is-current, .tick-sample i.is-current { background: var(--sticker, var(--pink)); }
+/* Right-to-left books: page 1 at the right, the way the card scrubs. */
+.card-cover[data-dir="rtl"] .ticks { flex-direction: row-reverse; }
+/* Pages that run up or down scrub with vertical mouse moves. */
+.card-cover[data-dir="ttb"], .card-cover[data-dir="btt"],
+.stage-frame[data-dir="ttb"], .stage-frame[data-dir="btt"] { cursor: ns-resize; }
 /* Skipped (blank, or text in plates-only mode): a thin dash, unlike any square. */
 .ticks i.is-skipped, .tick-sample i.is-skipped { background: linear-gradient(#8d8272, #8d8272) center / 100% 2px no-repeat; }
 

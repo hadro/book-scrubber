@@ -69,6 +69,9 @@ const BOOKS = {
   stall: [3, 40, "stall"], // first request for each image hangs until the client gives up
   thumbs: [3, 40, "ok"],
   home: [3, 30, "ok"],
+  rtl: [3, 20, "ok", "right-to-left"],
+  ttb: [3, 20, "ok", "top-to-bottom"],
+  btt: [3, 20, "ok", "bottom-to-top"],
 };
 
 export async function startFakeIiif() {
@@ -84,8 +87,8 @@ export async function startFakeIiif() {
     let m;
     if ((m = u.pathname.match(/^\/m\/(\w+)\.json$/)) && BOOKS[m[1]]) {
       stats.manifests++;
-      const [v, n] = BOOKS[m[1]];
-      const json = (v === 2 ? v2Manifest : v3Manifest)(n, { base: `${origin}/img/${m[1]}`, label: `Book ${m[1]}` });
+      const [v, n, , direction] = BOOKS[m[1]];
+      const json = (v === 2 ? v2Manifest : v3Manifest)(n, { base: `${origin}/img/${m[1]}`, label: `Book ${m[1]}`, direction });
       if (m[1] === "thumbs") json.items.forEach((c, i) => (c.thumbnail = [{ id: `${origin}/thumb/thumbs/p${i}.svg`, type: "Image", width: 280, height: 373 }]));
       if (m[1] === "home") json.homepage = [{ id: "https://library.example/items/home", type: "Text" }];
       res.writeHead(200, { "Content-Type": "application/json", ...cors });
@@ -103,6 +106,13 @@ export async function startFakeIiif() {
           items: ["plain", "oz", "mixed"].map((b) => ({ id: `${origin}/m/${b}.json`, type: "Manifest", label: { en: [`Book ${b}`] } })),
         })
       );
+    }
+    // A persistent-identifier resolver: redirects browser-style requests to the
+    // manifest, but has no route for a request asking for JSON.
+    if ((m = u.pathname.match(/^\/ark:\/1\/(\w+)\/manifest$/)) && BOOKS[m[1]]) {
+      if (/json/.test(req.headers.accept || "")) return res.writeHead(404, cors).end();
+      res.writeHead(301, { Location: `/m/${m[1]}.json`, ...cors });
+      return res.end();
     }
     if ((m = u.pathname.match(/^\/(img|thumb)\/(\w+)\/p(\d+)/)) && BOOKS[m[2]]) {
       const book = m[2];

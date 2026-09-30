@@ -29,7 +29,7 @@ Why it exists, and how libraries have tried to show a whole book with one thumbn
 - **Viewer.** Scrubbing, play/pause, speed control, boomerang mode and keyboard controls. Share links open the book at the page you're on (`#m=…&p=42`). The viewer also links to the item page and the manifest.
 - **Exports.** GIF, video (WebM or MP4, whichever the browser can record) or a contact-sheet JPEG. Choose frames, width, speed and pages (no blanks, plates only, or all). A credit line with the title and institution is added by default. GIFs are encoded in the browser with [gifenc](https://github.com/mattdesl/gifenc), vendored in `vendor/`.
 - **Flash mode.** Every card cycles its pages at once, like the old IA search results.
-- Right-to-left books scrub in the right direction. Light and dark themes follow the OS setting.
+- Books scrub the way their pages run (the manifest's `viewingDirection`): right-to-left books are mirrored, and top-to-bottom or bottom-to-top ones (scrolls, notebooks bound at the top) scrub with up-and-down mouse moves and the Up/Down arrow keys. Light and dark themes follow the OS setting.
 - **Accessible (WCAG 2.2 AA).** Arrow keys scrub a focused card, and screen readers announce the page ("Page 12 of 240"). Focus returns to the card when the viewer closes, and the viewer has Previous/Next buttons as well as the slider. There is a skip link, and errors and export progress are announced. Colors pass contrast in light and dark themes, controls are at least 24×24 px, and the layout works at 320px wide. The OS "reduce motion" setting slows flash mode and playback and turns off decorative animation; the title wobble stops after a few seconds, and GIF previews have a pause button. `npm run test:e2e` runs an [axe-core](https://github.com/dequelabs/axe-core) audit of every screen, plus reflow, target-size and keyboard checks.
 - **Link previews.** Open Graph and Twitter card metadata, with a share image (`img/social-card.png`).
 
@@ -52,7 +52,15 @@ npm run test:e2e                  # the real app in headless Chromium against a 
 
 The end-to-end tests never contact real libraries. They start a local fake IIIF server whose books have blank, text and plate pages, and servers that lack CORS, fail, are slow, or forbid caching. They check scrubbing, politeness (request counts, backoff, caching), exports, collections, drag and drop, share links, touch and reduced motion. Both suites run on every push via `.github/workflows/test.yml`.
 
-`?examples=0` in the URL hides the starter shelf.
+### Linking to Flipbook
+
+Add `?iiif-content=` with a manifest or collection URL (or an encoded IIIF Content State) to put that item on the shelf when the page opens, for example from a collection page:
+
+```
+https://hadro.github.io/flipbook/?iiif-content=https://heritage.tudelft.nl/iiif/collections/lib-tresor-reuzenarbeid/collection.json
+```
+
+A collection shelves its first 36 manifests. `?manifest=` works the same way. Linked items aren't saved to the visitor's own shelf. Add `&examples=0` to hide the starter shelf, so only the linked content shows.
 
 ## Deploying
 

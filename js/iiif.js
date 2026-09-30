@@ -191,7 +191,15 @@ export async function fetchFirstManifest(candidates, { signal } = {}) {
     try {
       // Give up on a manifest after 30 s rather than leaving a card loading forever.
       const timeout = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined;
-      const res = await fetch(url, { signal: signal || timeout, headers: { Accept: "application/ld+json, application/json" } });
+      const opts = { signal: signal || timeout, redirect: "follow" };
+      let res = await fetch(url, { ...opts, headers: { Accept: "application/ld+json, application/json" } });
+      // Some resolvers (ARK and handle services, notably) only redirect a
+      // browser-style request and answer 404/406 when asked for JSON: ask
+      // again the way a plain link would.
+      if (!res.ok && res.status >= 400 && res.status < 500) {
+        const plain = await fetch(url, opts).catch(() => null);
+        if (plain && plain.ok) res = plain;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return { url, json };
@@ -348,7 +356,7 @@ export async function followToManifest(first, fetchJson) {
   return { url, json, part };
 }
 
-/** Flatten a v2 or v3 manifest into {label, pages[], rtl, attribution}. */
+/** Flatten a v2 or v3 manifest into {label, pages[], direction, rtl, attribution}. */
 export function parseManifest(json) {
   if (!json || typeof json !== "object") throw new Error("Not a JSON object");
   const type = json.type || json["@type"];
@@ -382,9 +390,20 @@ export function parseManifest(json) {
     label: labelText(json.label) || "Untitled",
     homepage: (home && (typeof home === "string" ? home : idOf(home))) || null,
     pages,
+    direction: viewingDirection(dir),
     rtl: /right-to-left/.test(dir),
     attribution: attribution.replace(/<[^>]+>/g, "").trim(),
   };
+}
+
+/**
+ * The manifest's viewingDirection as "ltr" (the default), "rtl", "ttb" or
+ * "btt". Canvases are always listed in reading order; this only says which
+ * way the pages run.
+ */
+export function viewingDirection(value) {
+  const m = String(value || "").match(/(left-to-right|right-to-left|top-to-bottom|bottom-to-top)/);
+  return m ? { "left-to-right": "ltr", "right-to-left": "rtl", "top-to-bottom": "ttb", "bottom-to-top": "btt" }[m[1]] : "ltr";
 }
 
 // ---------------------------------------------------------------------------
