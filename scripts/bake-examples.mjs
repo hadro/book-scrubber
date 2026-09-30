@@ -151,6 +151,7 @@ export async function bake(examples, { outDir, fetchImpl = fetch, force = false,
       index.items[ex.input] = {
         label: m.label,
         total: m.pages.length,
+        direction: m.direction,
         rtl: m.rtl,
         attribution: m.attribution,
         homepage: m.homepage,

@@ -333,6 +333,55 @@ test("pasting a collection shelves its books", async () => {
   await ctx.close();
 });
 
+test("viewing direction: vertical books scrub up and down, right-to-left ones mirror", async () => {
+  const { ctx, page } = await openApp({ shelf: ["ttb", "btt", "rtl"] });
+  await page.waitForFunction(() => document.querySelectorAll(".card .card-img.is-ready").length === 3);
+  const counterAt = async (title, fx, fy) => {
+    const card = page.locator(".card", { hasText: `Book ${title}` });
+    const cover = card.locator(".card-cover");
+    await cover.scrollIntoViewIfNeeded();
+    const box = await cover.boundingBox();
+    await page.mouse.move(box.x + box.width * fx, box.y + box.height * fy);
+    // Wait for the whole reel, so the card isn't showing the nearest loaded page instead.
+    await card.locator(".ticks i:not(.is-loaded)").first().waitFor({ state: "detached", timeout: 10000 });
+    await page.mouse.move(box.x + box.width * fx + 1, box.y + box.height * fy);
+    await sleep(60);
+    return cover.locator(".counter").textContent();
+  };
+  // Top-to-bottom: the pointer's height picks the page, sideways moves don't.
+  assert.equal(await counterAt("ttb", 0.5, 0.02), "p. 1 / 20");
+  assert.equal(await counterAt("ttb", 0.5, 0.97), "p. 20 / 20");
+  assert.equal(await counterAt("ttb", 0.1, 0.5), await counterAt("ttb", 0.9, 0.5));
+  assert.equal(await page.locator(".card", { hasText: "Book ttb" }).locator(".card-cover").evaluate((el) => getComputedStyle(el).cursor), "ns-resize");
+  // Bottom-to-top: the first page is at the bottom.
+  assert.equal(await counterAt("btt", 0.5, 0.97), "p. 1 / 20");
+  assert.equal(await counterAt("btt", 0.5, 0.02), "p. 20 / 20");
+  // Right-to-left: first page at the right, and the tick strip agrees.
+  assert.equal(await counterAt("rtl", 0.98, 0.5), "p. 1 / 20");
+  const ticks = page.locator(".card", { hasText: "Book rtl" }).locator(".ticks i");
+  assert.ok((await ticks.first().boundingBox()).x > (await ticks.last().boundingBox()).x, "rtl ticks run right to left");
+  await page.mouse.move(2, 2);
+
+  // Viewer: arrow keys follow the direction too.
+  await page.locator(".card", { hasText: "Book btt" }).locator(".card-cover").click();
+  await page.waitForFunction(() => /p\. 1 \/ 20/.test(document.querySelector("#stage-counter").textContent));
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  assert.match(await page.textContent("#stage-counter"), /^p\. 3 \/ 20/);
+  await page.keyboard.press("ArrowDown");
+  assert.match(await page.textContent("#stage-counter"), /^p\. 2 \/ 20/);
+  await page.keyboard.press("Escape");
+  await page.mouse.move(2, 2);
+  await page.locator(".card", { hasText: "Book rtl" }).locator(".card-cover").click();
+  // (Starts at page 1, not where the last book was left.)
+  await page.waitForFunction(() => /p\. 1 \/ 20/.test(document.querySelector("#stage-counter").textContent));
+  assert.equal(await page.getAttribute("#stage-range", "dir"), "rtl");
+  await page.keyboard.press("ArrowLeft");
+  assert.match(await page.textContent("#stage-counter"), /^p\. 2 \/ 20/);
+  await page.keyboard.press("Escape");
+  await ctx.close();
+});
+
 test("a resolver link that redirects to the manifest can be pasted", async () => {
   const { ctx, page } = await openApp();
   await page.fill("#paste-input", `${iiif.origin}/ark:/1/plain/manifest`);

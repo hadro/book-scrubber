@@ -39,14 +39,14 @@ export function v2Manifest(n, { base = "https://img.example.org/iiif", label = "
   };
 }
 
-export function v3Manifest(n, { base = "https://img.example.org/iiif3", label = "A v3 book", rtl = false } = {}) {
+export function v3Manifest(n, { base = "https://img.example.org/iiif3", label = "A v3 book", rtl = false, direction = rtl ? "right-to-left" : null } = {}) {
   return {
     "@context": "http://iiif.io/api/presentation/3/context.json",
     id: "https://example.org/v3/manifest",
     type: "Manifest",
     label: { en: [label] },
     requiredStatement: { label: { en: ["Attribution"] }, value: { en: ["Provided by a museum"] } },
-    ...(rtl ? { viewingDirection: "right-to-left" } : {}),
+    ...(direction ? { viewingDirection: direction } : {}),
     items: Array.from({ length: n }, (_, i) => ({
       id: `https://example.org/v3/canvas/${i}`,
       type: "Canvas",

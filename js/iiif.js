@@ -356,7 +356,7 @@ export async function followToManifest(first, fetchJson) {
   return { url, json, part };
 }
 
-/** Flatten a v2 or v3 manifest into {label, pages[], rtl, attribution}. */
+/** Flatten a v2 or v3 manifest into {label, pages[], direction, rtl, attribution}. */
 export function parseManifest(json) {
   if (!json || typeof json !== "object") throw new Error("Not a JSON object");
   const type = json.type || json["@type"];
@@ -390,9 +390,20 @@ export function parseManifest(json) {
     label: labelText(json.label) || "Untitled",
     homepage: (home && (typeof home === "string" ? home : idOf(home))) || null,
     pages,
+    direction: viewingDirection(dir),
     rtl: /right-to-left/.test(dir),
     attribution: attribution.replace(/<[^>]+>/g, "").trim(),
   };
+}
+
+/**
+ * The manifest's viewingDirection as "ltr" (the default), "rtl", "ttb" or
+ * "btt". Canvases are always listed in reading order; this only says which
+ * way the pages run.
+ */
+export function viewingDirection(value) {
+  const m = String(value || "").match(/(left-to-right|right-to-left|top-to-bottom|bottom-to-top)/);
+  return m ? { "left-to-right": "ltr", "right-to-left": "rtl", "top-to-bottom": "ttb", "bottom-to-top": "btt" }[m[1]] : "ltr";
 }
 
 // ---------------------------------------------------------------------------

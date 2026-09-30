@@ -387,7 +387,16 @@ class Book {
   }
 
   get rtl() {
-    return this.data ? this.data.rtl : !!(this.baked && this.baked.rtl);
+    return this.direction === "rtl";
+  }
+  /** "ltr", "rtl", "ttb" or "btt": which way the pages run (the manifest's viewingDirection). */
+  get direction() {
+    const from = this.data || this.baked;
+    return (from && (from.direction || (from.rtl ? "rtl" : null))) || "ltr";
+  }
+  /** Pages run up or down (a scroll, a top-bound notebook): scrub with vertical mouse moves. */
+  get vertical() {
+    return this.direction === "ttb" || this.direction === "btt";
   }
 
   load() {
@@ -466,6 +475,27 @@ const visibility = new IntersectionObserver(
   },
   { rootMargin: "300px" }
 );
+
+/**
+ * Where a pointer sits over a card or the viewer, as 0..1 in reading order.
+ * Books whose pages run up or down scrub with vertical mouse moves; touch
+ * always scrubs sideways, since dragging up and down scrolls the page.
+ */
+function scrubFraction(book, e, r) {
+  if (book.vertical && e.pointerType === "mouse") {
+    const f = (e.clientY - r.top) / r.height;
+    return book.direction === "btt" ? 1 - f : f;
+  }
+  const f = (e.clientX - r.left) / r.width;
+  return book.rtl ? 1 - f : f;
+}
+
+/** +1 / -1 for an arrow key that turns the page (mirrored for right-to-left and bottom-to-top), else 0. */
+function arrowStep(book, key) {
+  if (key === "ArrowRight" || key === "ArrowLeft") return (key === "ArrowRight") !== book.rtl ? 1 : -1;
+  if (book.vertical && (key === "ArrowDown" || key === "ArrowUp")) return (key === "ArrowDown") !== (book.direction === "btt") ? 1 : -1;
+  return 0;
+}
 
 class Card {
   constructor(book) {
@@ -555,6 +585,7 @@ class Card {
     // One frame per pixel of card width at most, so every frame can be reached by the mouse.
     const width = Math.round(this.cover.getBoundingClientRect().width) || 0;
     this.reel = this.book.reel(density, Math.max(REEL_MAX, width));
+    this.cover.dataset.dir = this.book.direction;
     this.loaded = new Set();
     this.ticks.replaceChildren(...this.reel.pages.map(() => document.createElement("i")));
     // Anything already loaded (by the viewer, an earlier reel, the baked shelf) counts straight away.
@@ -661,10 +692,9 @@ class Card {
     this.counter.textContent = `p. ${this.reel.pages[j] + 1} / ${this.book.total}${this.platesActive() ? " · plates" : ""}`;
   }
 
-  /** Scrub to a 0..1 position across the card. */
+  /** Scrub to a 0..1 position across the card, already in reading order. */
   scrubTo(f) {
     if (!this.reel) return;
-    if (this.book.rtl) f = 1 - f;
     const n = this.reel.pages.length;
     const i = Math.min(n - 1, Math.max(0, Math.floor(f * n)));
     this.wanted = i;
@@ -702,9 +732,8 @@ class Card {
     c.addEventListener("pointermove", (e) => {
       if (e.pointerType !== "mouse" && startX === null) return;
       if (startX !== null && Math.abs(e.clientX - startX) > 8) moved = true;
-      const r = c.getBoundingClientRect();
       c.classList.add("is-scrubbing");
-      this.scrubTo((e.clientX - r.left) / r.width);
+      this.scrubTo(scrubFraction(this.book, e, c.getBoundingClientRect()));
     });
     const leave = () => {
       startX = null;
@@ -726,10 +755,10 @@ class Card {
     });
     c.addEventListener("keydown", (e) => {
       if (!this.reel) return;
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      const step = arrowStep(this.book, e.key);
+      if (step) {
         e.preventDefault();
         this.preload();
-        const step = (e.key === "ArrowRight") !== this.book.rtl ? 1 : -1;
         const next = Math.min(this.reel.pages.length - 1, Math.max(0, (this.wanted ?? this.current) + step));
         this.wanted = next;
         this.show(next);
@@ -1045,6 +1074,9 @@ function nearestAvailable(i) {
 function setFrames(pages, keepPage) {
   V.frames = pages;
   range.max = String(Math.max(0, pages.length - 1));
+  // Match the slider (and the stage's cursor) to the way the pages run.
+  range.dir = V.book.rtl ? "rtl" : "ltr";
+  stageFrame.dataset.dir = V.book.direction;
   let i = 0;
   if (keepPage != null) {
     i = pages.findIndex((p) => p >= keepPage);
@@ -1067,6 +1099,9 @@ async function openViewer(book, { page = null } = {}) {
   V.book = book;
   V.live = false;
   V.dir = 1;
+  // Forget the last book's frames, or its page would carry over as "where the visitor was".
+  V.frames = [];
+  V.wanted = 0;
   V.bakedMap = new Map(book.baked ? book.baked.pages.map((p, k) => [p, book.baked.files[k]]) : []);
 
   const src = SOURCES[book.source] || SOURCES.mine;
@@ -1260,9 +1295,7 @@ range.addEventListener("input", () => {
   stageFrame.addEventListener("pointermove", (e) => {
     if (e.pointerType !== "mouse" && !dragging) return;
     if (!V.frames.length) return;
-    const r = stageFrame.getBoundingClientRect();
-    let f = (e.clientX - r.left) / r.width;
-    if (V.book.rtl) f = 1 - f;
+    const f = scrubFraction(V.book, e, stageFrame.getBoundingClientRect());
     const i = Math.min(V.frames.length - 1, Math.max(0, Math.floor(f * V.frames.length)));
     if (i === V.wanted) return;
     stopPlay();
@@ -1272,12 +1305,12 @@ range.addEventListener("input", () => {
 
 viewer.addEventListener("keydown", (e) => {
   if (e.target.matches("input[type=text], select")) return;
-  const rtl = V.book && V.book.rtl;
-  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-    if (e.target === range) return; // native range handles it
+  const step = V.book && arrowStep(V.book, e.key);
+  if (step) {
+    if (e.target === range && (e.key === "ArrowRight" || e.key === "ArrowLeft")) return; // native range handles it
     e.preventDefault();
     stopPlay();
-    viewerStep((e.key === "ArrowRight") !== rtl ? 1 : -1);
+    viewerStep(step);
     announceViewerPage();
   } else if (e.key === " " && !e.target.matches("button, a")) {
     e.preventDefault();

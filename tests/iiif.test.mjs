@@ -14,6 +14,7 @@ import {
   itemPageFromUrl,
   followToManifest,
   fetchFirstManifest,
+  viewingDirection,
 } from "../js/iiif.js";
 import { v2Manifest, v3Manifest } from "./fixtures.mjs";
 
@@ -301,4 +302,18 @@ test("fetchFirstManifest: a resolver that refuses JSON requests is asked again l
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test("viewing direction: all four IIIF values, v2 sequences, and the default", () => {
+  assert.equal(parseManifest(v3Manifest(2)).direction, "ltr");
+  assert.equal(parseManifest(v3Manifest(2, { rtl: true })).direction, "rtl");
+  const ttb = parseManifest(v3Manifest(2, { direction: "top-to-bottom" }));
+  assert.equal(ttb.direction, "ttb");
+  assert.equal(ttb.rtl, false);
+  assert.equal(parseManifest(v3Manifest(2, { direction: "bottom-to-top" })).direction, "btt");
+  const v2 = v2Manifest(2);
+  v2.sequences[0].viewingDirection = "top-to-bottom";
+  assert.equal(parseManifest(v2).direction, "ttb");
+  assert.equal(viewingDirection("sc:bottom-to-top"), "btt");
+  assert.equal(viewingDirection("sideways"), "ltr");
 });
