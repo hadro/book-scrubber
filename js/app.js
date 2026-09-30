@@ -1498,7 +1498,7 @@ gifBtn.addEventListener("click", async () => {
     const opts = { width, height, delay, background, credit, signal: abort.signal };
     let blob;
     if (format === "video") blob = await encodeVideo(images, { ...opts, onProgress: progress("Recording frame") });
-    else if (format === "sheet") blob = await contactSheet(images, { cellWidth: Math.min(width, 300), aspect, background, credit });
+    else if (format === "sheet") blob = await contactSheet(images, { cellWidth: Math.min(width, 300), aspect, background, credit, rtl: V.book.rtl });
     else blob = await encodeGif(images, { ...opts, onProgress: progress("Encoding page") });
 
     V.gifUrl = URL.createObjectURL(blob);
