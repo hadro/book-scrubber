@@ -25,11 +25,11 @@ export const EXAMPLES = [
     input: "https://www.loc.gov/item/2021667837/",
     
   },
-    {
+  {
+    // Title comes from the manifest.
     source: "yale",
-    title: "Ferns",
-    note: "Nature-printed plates · 1868",
-    input: "https://collections.library.yale.edu/manifests/33336990",
+    note: "Yale University Library",
+    input: "https://collections.library.yale.edu/manifests/2037182",
   },
   {
     source: "ia",
